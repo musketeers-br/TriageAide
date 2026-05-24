@@ -1,0 +1,73 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:ana-costa-patient",
+      "resource": {
+        "resourceType": "Patient",
+        "name": [{ "use": "official", "family": "Costa", "given": ["Ana"] }],
+        "gender": "female",
+        "birthDate": "1998-07-22",
+        "telecom": [{ "system": "phone", "value": "+55-11-97777-4321", "use": "mobile" }],
+        "identifier": [{ "system": "http://hospital.smarthealthit.org", "value": "ana-costa-1998" }],
+        "address": [{ "line": ["Rua Augusta, 500"], "city": "Sao Paulo", "state": "SP", "postalCode": "01304-000", "country": "BR" }]
+      },
+      "request": { "method": "POST", "url": "Patient" }
+    },
+    {
+      "fullUrl": "urn:uuid:ana-costa-amigdalite",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "resolved" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed" }] },
+        "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "J03.9", "display": "Acute tonsillitis, unspecified" }], "text": "Amigdalite aguda" },
+        "subject": { "reference": "urn:uuid:ana-costa-patient", "display": "Ana Costa" },
+        "onsetDateTime": "2024-08-10",
+        "abatementDateTime": "2024-08-20"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:ana-costa-imc",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "39156-5", "display": "Body mass index" }], "text": "IMC" },
+        "subject": { "reference": "urn:uuid:ana-costa-patient", "display": "Ana Costa" },
+        "effectiveDateTime": "2024-03-15T10:00:00-03:00",
+        "valueQuantity": { "value": 22.0, "unit": "kg/m2", "system": "http://unitsofmeasure.org", "code": "kg/m2" }
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:ana-costa-pa",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "85354-9", "display": "Blood pressure panel" }], "text": "Pressao arterial" },
+        "subject": { "reference": "urn:uuid:ana-costa-patient", "display": "Ana Costa" },
+        "effectiveDateTime": "2024-03-15T10:00:00-03:00",
+        "component": [
+          { "code": { "coding": [{ "system": "http://loinc.org", "code": "8480-6", "display": "Systolic blood pressure" }] }, "valueQuantity": { "value": 110, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]" } },
+          { "code": { "coding": [{ "system": "http://loinc.org", "code": "8462-4", "display": "Diastolic blood pressure" }] }, "valueQuantity": { "value": 70, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]" } }
+        ]
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:ana-costa-encounter",
+      "resource": {
+        "resourceType": "Encounter",
+        "status": "finished",
+        "class": { "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "AMB", "display": "ambulatory" },
+        "type": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "185349003", "display": "Encounter for check-up" }], "text": "Check-up anual" }],
+        "subject": { "reference": "urn:uuid:ana-costa-patient", "display": "Ana Costa" },
+        "period": { "start": "2024-03-15T10:00:00-03:00", "end": "2024-03-15T10:30:00-03:00" }
+      },
+      "request": { "method": "POST", "url": "Encounter" }
+    }
+  ]
+}

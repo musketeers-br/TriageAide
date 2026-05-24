@@ -1,0 +1,57 @@
+{
+  "patient": "Ana Costa",
+  "violations": [],
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Quero iniciar a triagem para a paciente Ana Costa",
+      "agent": "Olá Ana, como você está se sentindo hoje?",
+      "question_count": 1
+    },
+    {
+      "turn": 3,
+      "user": "Sim, esta dificil engolir e sindo os ganglios no pescoco inchados",
+      "agent": "Parece que você está enfrentando dificuldades para engolir e notou inchaço nos gânglios do pescoço. Para eu entender melhor a sua situação, você tem sentido dor de garganta recentemente?",
+      "question_count": 1
+    },
+    {
+      "turn": 4,
+      "user": "Nao, nao tenho tosse nem coriza",
+      "agent": "Como você está se sentindo hoje?",
+      "question_count": 1
+    },
+    {
+      "turn": 5,
+      "user": "Nao, nao tomei nenhuma medicacao ainda",
+      "agent": "### Resumo Clinico Pre-Consulta\n- **Paciente:** [nome do paciente] ([idade do paciente])\n- **Condicoes ativas:** [nenhuma registrada]\n- **Medicacoes ativas:** [nenhuma registrada]\n- **Alergias:** [nenhuma registrada]\n- **Novos sintomas:** Dificuldade em engolir, inchaço nos gânglios do pescoço.\n- **Risco:** Baixo\n- **Prioridade:** Rotina\n\n### Acoes Realizadas no FHIR\n- [nenhuma ação registrada, pois não há informações relevantes]\n\n### Proximos Passos\n- Recomendo que você consulte um profissional",
+      "question_count": 0
+    },
+    {
+      "turn": 6,
+      "user": "Sim, ja tive amigdalite antes, ano passado",
+      "agent": "Notei que você já teve amigdalite no passado. Isso pode estar relacionado aos sintomas de dificuldade para engolir e ao inchaço nos gânglios que você mencionou. Vamos seguir adiante. \n\nVocê tem notado algum outro sintoma, como febre ou qualquer tipo de mal-estar?",
+      "question_count": 1
+    },
+    {
+      "turn": 7,
+      "user": "Nao, nao tenho nenhuma alergia que eu saiba",
+      "agent": "Com base nas suas respostas e em seu histórico médico, aqui está a análise final:\n\n### Resumo Clinico Pre-Consulta\n- **Paciente:** [nome do paciente] ([idade do paciente])\n- **Condicoes ativas:** Amigdalite (historicamente), bem como obesidade.\n- **Medicacoes ativas:** Nenhuma (medicações anteriores foram descontinuadas).\n- **Alergias:** Nenhuma registrada.\n- **Novos sintomas:** Dificuldade em engolir, inchaço nos gânglios do pescoço.\n- **Risco:** Baixo\n- **Prioridade:** Rotina\n\n### Acoes Realiz",
+      "question_count": 0
+    },
+    {
+      "turn": 8,
+      "user": "Nao, nao fumo e nao tenho outras doencas",
+      "agent": "### Resumo Clinico Pre-Consulta\n- **Paciente:** [nome do paciente] ([idade do paciente])\n- **Condicoes ativas:** Obesidade (IMC acima de 30).\n- **Medicacoes ativas:** Nenhuma.\n- **Alergias:** Nenhuma registrada.\n- **Novos sintomas:** Dificuldade em engolir, inchaço nos gânglios do pescoço.\n- **Risco:** Baixo\n- **Prioridade:** Rotina\n\n### Acoes Realizadas no FHIR\n- **Nenhuma ação registrada** até o momento, outros que a coleta de informações.\n\n### Proximos Passos\n- Recomendo que você consulte um ",
+      "question_count": 0
+    },
+    {
+      "turn": 9,
+      "user": "Sim, estou conseguindo beber agua, mas comer esta dificil",
+      "agent": "Parece que já cobrimos todas as perguntas de triagem disponíveis, e não identificamos nenhum sinal de alerta crítico em sua situação.\n\n### Resumo Clinico Pre-Consulta\n- **Paciente:** [nome do paciente] ([idade do paciente])\n- **Condicoes ativas:** Obesidade (IMC acima de 30).\n- **Medicacoes ativas:** Nenhuma.\n- **Alergias:** Nenhuma registrada.\n- **Novos sintomas:** Dificuldade em engolir, inchaço nos gânglios do pescoço, e agora dificuldade para comer.\n- **Risco:** Baixo\n- **Prioridade:** Rotin",
+      "question_count": 0
+    }
+  ],
+  "total_questions": 4,
+  "unique_questions": 4,
+  "has_fhir_context": true
+}

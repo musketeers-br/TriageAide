@@ -1,145 +1,236 @@
- [![Gitter](https://img.shields.io/badge/Available%20on-Intersystems%20Open%20Exchange-00b2a9.svg)](https://openexchange.intersystems.com/package/iris-fhir-template)
- [![Quality Gate Status](https://community.objectscriptquality.com/api/project_badges/measure?project=intersystems_iris_community%2Firis-fhir-template&metric=alert_status)](https://community.objectscriptquality.com/dashboard?id=intersystems_iris_community%2Firis-fhir-template)
- [![Reliability Rating](https://community.objectscriptquality.com/api/project_badges/measure?project=intersystems_iris_community%2Firis-fhir-template&metric=reliability_rating)](https://community.objectscriptquality.com/dashboard?id=intersystems_iris_community%2Firis-fhir-template)
-# iris-fhirserver-template
-This is the base template for using InterSystems IRIS for Health Community Edition as a FHIR Server
+# TriageAide — FHIR-First Pre-Consultation Triage
 
-It setups a FHIR SERVER, imports the test data, demoes REST API usage with a simple web page.
+TriageAide is an AI agent that retrieves a patient's FHIR clinical history, conducts a personalized pre-consultation triage via chat, and writes structured triage results back to the FHIR server — so the physician receives a ready-made clinical summary before the appointment.
+
+> "TriageAide first retrieves patient history from a FHIR server, builds contextual clinical understanding, and performs an adaptive pre-consultation triage that enriches and updates the longitudinal patient record."
+
+TriageAide is an autonomous AI agent that operates **on top of FHIR data** — it queries the patient's clinical history from a FHIR server (InterSystems IRIS for Health), conducts an intelligent contextual pre-consultation triage, and writes new FHIR resources back to the patient record.
+
+This is **not** a generic chatbot that generates FHIR from scratch. It is an interoperable AI agent that reasons over existing clinical data:
+
+1. **FHIR-First** — consults patient history BEFORE interacting with the patient
+2. **Contextual Triage** — asks intelligent questions based on real clinical history, not generic checklists
+3. **Bidirectional** — reads from AND writes back to the FHIR server
+4. **Longitudinal** — understands care continuity (e.g., "last visit 8 months ago — follow-up overdue")
+
+## 5-Step Workflow
+
+1. **FHIR Query** — Agent retrieves Patient, Condition, MedicationRequest, Observation, AllergyIntolerance, Encounter
+2. **Contextual Triage** — With history in hand, generates intelligent, personalized questions
+3. **Interactive Conversation** — Chat loop: agent asks one question at a time, patient responds, agent deepens
+4. **Clinical Reasoning** — Cross-references FHIR history + new symptoms → risk assessment, priority suggestion
+5. **FHIR Update** — Creates Observation, QuestionnaireResponse, Flag, Task, Encounter back on the server
+
+## Architecture
+
+```
+FHIR Server (InterSystems IRIS for Health)
+    |
+    +-- fhir_server.py          (MCP :8000) — 12 FHIR CRUD tools
+    +-- triage_server.py        (MCP :8001) — 4 contextual triage tools
+    +-- clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
+    |
+    +-- agent.py  (LangChain + OpenAI gpt-4o-mini) — core agent, system prompt
+    +-- cli.py    — interactive CLI interface
+    +-- app.py    (Gradio :7860) — web chat UI
+```
+
+3 specialized MCP servers expose 20 tools via [FastMCP](https://github.com/jlowin/fastmcp) (streamable-http transport). A LangChain agent orchestrates them with a detailed system prompt that enforces the 5-step workflow and one-question-at-a-time conversation rules.
 
 ## Prerequisites
-Make sure you have [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) and [Docker desktop](https://www.docker.com/products/docker-desktop) installed.
 
-## Installation
+- [Docker](https://www.docker.com/products/docker-desktop) + Docker Compose
+- OpenAI API key (gpt-4o-mini)
 
-### IPM
+## How to Run
 
-Open IRIS for Health installation with IPM client installed. Call in any namespace:
+1. Copy the environment template and set your OpenAI API key:
 
-```
-USER>zpm "install fhir-server"
-```
-
-This will install FHIR server in FHIRSERVER namespace.
-
-Or call the following for installing programmatically:
-```
-set sc=$zpm("install fhir-server")
+```bash
+cd python/triage
+cp .env.example .env
+# Edit .env and paste your real OPENAI_API_KEY
 ```
 
+2. Build and start the container:
 
-### Docker (e.g. for dev purposes)
-
-Clone/git pull the repo into any local directory
-
-```
-$ git clone https://github.com/intersystems-community/iris-fhir-template.git
+```bash
+docker compose build --no-cache --progress=plain
+docker compose up -d
 ```
 
-Open the terminal in this directory and run:
+3. Open the Gradio UI: **http://localhost:7860**
 
-```
-$ docker-compose up -d
-```
+All MCP servers start automatically on container boot via `custom-entrypoint.sh` → `start_mcp_servers.sh`. Test patients (4 scenarios) are loaded automatically on first boot.
 
-## Patient data
-The template goes with 5 preloaded patents in [/data/fhir](https://github.com/intersystems-community/iris-fhir-server-template/tree/master/data/fhir) folder which are being loaded during [docker build](https://github.com/intersystems-community/iris-fhir-server-template/blob/8bd2932b34468f14530a53d3ab5125f9077696bb/iris.script#L26)
-You can generate more patients doing the following. Open shel terminal in repository folder and call:
-```
-#./synthea-loader.sh 10
-```
-this will create 10 more patients in data/fhir folder.
-Then open IRIS terminal in FHIRSERVER namespace with the following command:
-```
-docker-compose exec iris iris session iris -U FHIRServer
-```
-and call the loader method:
-```
-FHIRSERVER>d ##class(fhirtemplate.Setup).LoadPatientData("/data/fhir","FHIRSERVER","/fhir/r4")
+### Running Manually (inside the container)
+
+For debugging:
+
+```bash
+docker compose exec iris bash
+cd /home/irisowner/irisdev/python/triage
+bash start_servers.sh
 ```
 
- with using the [following project](https://github.com/intersystems-community/irisdemo-base-synthea)
+Or start each component separately:
 
-## Testing FHIR R4 API
+```bash
+# Terminal 1: FHIR MCP Server
+FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 fhir_server.py
 
-Open URL http://localhost:32783/fhir/r4/metadata
-you should see the output of fhir resources on this server
+# Terminal 2: Triage MCP Server
+python3 triage_server.py
 
-## Swagger UI
+# Terminal 3: Clinical Reasoning MCP Server
+python3 clinical_reasoning_server.py
 
-You can get the Swagger UI and work with it at:
-http://localhost:32783/swagger-ui/index.html
+# Terminal 4: Gradio UI
+FHIR_BASE_URL=http://localhost:52773/fhir/r4 OPENAI_API_KEY=sk-... python3 app.py
+```
 
-To try it Open /Patient/{id} resource and call for the patient 3.
-Here is what you should see:
-<img width="1273" alt="Image" src="https://github.com/user-attachments/assets/8dc340cc-e5e4-4bf7-9e16-8169f76e27b6" />
+## Test Patients
 
-## Testing Postman calls
-Get fhir resources metadata
-GET call for http://localhost:32783/fhir/r4/metadata
-<img width="881" alt="Screenshot 2020-08-07 at 17 42 04" src="https://user-images.githubusercontent.com/2781759/89657453-c7cdac00-d8d5-11ea-8fed-71fa8447cc45.png">
+4 patients with distinct clinical scenarios are loaded via `seed_data.py`:
 
+| Patient | Age | Conditions | Expected Scenario |
+|---|---|---|---|
+| **Maria Silva** | 58, F | DM2 + Hypertension + HbA1c 8.2% | Uncontrolled diabetes, elevated cardiovascular risk |
+| **Joao Santos** | 72, M | HF + AFib + DM2 + HTN + CKD stage 3 | Polypharmacy, drug interactions, high risk |
+| **Ana Costa** | 28, F | No active conditions | Generic questions, no red flags, routine priority |
+| **Roberto Lima** | 65, M | COPD + HTN + Osteoarthritis + Depression + SpO2 93% | Respiratory red flags, severe allergy (anaphylaxis), urgent priority |
 
-Open Postman and make a GET call for the preloaded Patient:
-http://localhost:32783/fhir/r4/Patient/1
-<img width="884" alt="Screenshot 2020-08-07 at 17 42 26" src="https://user-images.githubusercontent.com/2781759/89657252-71606d80-d8d5-11ea-957f-041dbceffdc8.png">
+To reload test data (inside the container):
 
+```bash
+FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py clean
+FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py load
+```
 
-## Testing FHIR API calls in simple frontend APP
+To list loaded patients:
 
-the very basic frontend app with search and get calls to Patient and Observation FHIR resources could be found here:
-http://localhost:32783/fhirUI/FHIRAppDemo.html
-or from VSCode ObjectScript menu:
-<img width="616" alt="Screenshot 2020-08-07 at 17 34 49" src="https://user-images.githubusercontent.com/2781759/89657546-ea5fc500-d8d5-11ea-97ed-6fbbf84da655.png">
+```bash
+FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py list
+```
 
-While open the page you will see search result for female anemic patients and graphs a selected patient's hemoglobin values:
-<img width="484" alt="Screenshot 2020-08-06 at 18 51 22" src="https://user-images.githubusercontent.com/2781759/89657718-2b57d980-d8d6-11ea-800f-d09dfb48f8bc.png">
+> **Note:** Patient IDs change on each reload. Use the patient name when talking to the agent.
 
+## File Structure
 
-## More sophisticated UI
+```
+python/triage/
+  .env                    # Config (FHIR_BASE_URL, OPENAI_API_KEY) — NOT tracked in git
+  .env.example            # Template without credentials
+  requirements.txt        # Python dependencies
+  seed_data.py            # Load/clean/list test patients
+  seed_data/              # FHIR Bundle JSON files for 4 test patients
+    patient_maria_silva.json
+    patient_joao_santos.json
+    patient_ana_costa.json
+    patient_roberto_lima.json
+  fhir_server.py                  # MCP Server 1 — FHIR CRUD (port 8000)
+  triage_server.py                # MCP Server 2 — Contextual triage (port 8001)
+  clinical_reasoning_server.py    # MCP Server 3 — Clinical reasoning (port 8002)
+  agent.py                        # Core agent (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+  cli.py                          # Interactive CLI interface
+  app.py                          # Gradio web chat UI (port 7860)
+  start_servers.sh                # Manual start script (MCP servers + Gradio)
+  PLAN.md                         # Architecture plan & tool specs
+  PROGRESS.md                     # Progress history & technical discoveries
+  README.md                       # This file
+```
 
-The example of a richer UI around the FHIR data can be observed at:
-http://localhost:32783/fhir/portal/patientlist.html
+## MCP Servers & Tools
 
-Here is an example screenshot of it:
-<img width="1381" alt="Image" src="https://github.com/user-attachments/assets/0aa18442-90ed-495a-9fb0-7ced2f121527" />
+### fhir_server.py (port 8000) — 12 FHIR CRUD tools
 
+| Tool | FHIR Method | Description |
+|---|---|---|
+| `search_patients` | GET /Patient?name={name} | Search patients by name (partial match) |
+| `get_patient` | GET /Patient/{id} | Demographics |
+| `get_patient_conditions` | GET /Condition?patient={id} | Conditions |
+| `get_patient_medications` | GET /MedicationRequest?patient={id} | Medications |
+| `get_patient_observations` | GET /Observation?patient={id} | Observations |
+| `get_patient_allergies` | GET /AllergyIntolerance?patient={id} | Allergies |
+| `get_patient_encounters` | GET /Encounter?patient={id} | Encounters |
+| `create_observation` | POST /Observation | New observation |
+| `create_condition` | POST /Condition | New condition |
+| `create_questionnaire_response` | POST /QuestionnaireResponse | Structured triage |
+| `create_encounter` | POST /Encounter | Pre-consultation encounter |
+| `create_flag_and_task` | POST /Flag + POST /Task | Alert + follow-up task |
 
-## Development Resources
-[InterSystems IRIS FHIR Documentation](https://docs.intersystems.com/irisforhealth20203/csp/docbook/Doc.View.cls?KEY=HXFHIR)
-[FHIR API](http://hl7.org/fhir/resourcelist.html)
-[Developer Community FHIR section](https://community.intersystems.com/tags/fhir)
+### triage_server.py (port 8001) — 4 contextual triage tools
 
-## What's inside the repository
+| Tool | Description |
+|---|---|
+| `build_contextual_questions` | Generates contextual questions based on FHIR history |
+| `parse_symptoms` | Extracts symptoms, duration, severity from patient text |
+| `check_red_flags` | Cross-references symptoms with existing conditions for warning signs |
+| `build_questionnaire_response_data` | Assembles FHIR QuestionnaireResponse |
 
-### Dockerfile
+### clinical_reasoning_server.py (port 8002) — 4 clinical reasoning tools
 
-The simplest dockerfile which starts IRIS and imports Installer.cls and then runs the Installer.setup method, which creates IRISAPP Namespace and imports ObjectScript code from /src folder into it.
-Use the related docker-compose.yml to easily setup additional parametes like port number and where you map keys and host folders.
-Use .env/ file to adjust the dockerfile being used in docker-compose.
+| Tool | Description |
+|---|---|
+| `assess_clinical_risk` | Risk score with justification |
+| `suggest_priority` | Care priority (routine/urgent/emergency) |
+| `generate_clinical_summary` | Summary for the physician |
+| `identify_follow_up_tasks` | Follow-up tasks based on risk and care gaps |
 
+## Ports
 
-### .vscode/settings.json
+| Host | Container | Service |
+|---|---|---|
+| 8000 | 8000 | FHIR MCP Server |
+| 8001 | 8001 | Triage MCP Server |
+| 8002 | 8002 | Clinical Reasoning MCP Server |
+| 7860 | 7860 | Gradio Web UI |
+| 32783 | 52773 | FHIR API (IRIS for Health) |
 
-Settings file to let you immedietly code in VSCode with [VSCode ObjectScript plugin](https://marketplace.visualstudio.com/items?itemName=daimor.vscode-objectscript))
+## Tech Stack
 
-### .vscode/launch.json
-Config file if you want to debug with VSCode ObjectScript
-
+| Component | Technology |
+|---|---|
+| FHIR Server | InterSystems IRIS for Health Community Edition |
+| MCP Servers | FastMCP with streamable-http transport |
+| Agent | LangChain + langchain-mcp-adapters + OpenAI gpt-4o-mini |
+| UI | Gradio ChatInterface |
+| Language | Python 3 |
+| Deploy | Docker (auto-startup MCP servers + seed data) |
 
 ## Troubleshooting
-**ERROR #5001: Error -28 Creating Directory /usr/irissys/mgr/FHIRSERVER/**
-If you see this error it probably means that you ran out of space in docker.
-you can clean up it with the following command:
-```
-docker system prune -f
-```
-And then start rebuilding image without using cache:
-```
-docker-compose build --no-cache
-```
-and start the container with:
-```
-docker-compose up -d
+
+### Check if MCP servers are running
+
+```bash
+docker compose exec iris bash -c 'cat /tmp/fhir_server.log'
+docker compose exec iris bash -c 'cat /tmp/triage_server.log'
+docker compose exec iris bash -c 'cat /tmp/cr_server.log'
 ```
 
-This and other helpful commands you can find in [dev.md](https://github.com/intersystems-community/iris-fhir-template/blob/cd7e0111ff94dcac82377a2aa7df0ce5e0571b5a/dev.md)
+### Restart MCP servers manually
+
+```bash
+docker compose exec iris bash -c 'pkill -f fhir_server.py; pkill -f triage_server.py; pkill -f clinical_reasoning_server.py'
+docker compose exec iris bash /home/irisowner/irisdev/start_mcp_servers.sh
+```
+
+### Reload test data
+
+```bash
+docker compose exec iris bash -c 'cd /home/irisowner/irisdev/python/triage && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py clean && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py load'
+```
+
+### "OPENAI_API_KEY not set" error
+
+Verify that `python/triage/.env` exists and contains a valid `OPENAI_API_KEY`.
+
+### Port 7860 not accessible
+
+1. Check if the container is running: `docker compose ps`
+2. Verify the port mapping in `docker-compose.yml` (`7860:7860`)
+3. Check the startup log: `docker compose exec iris bash -c 'cat /tmp/mcp_startup.log'`
+
+### Pip installs are lost on container restart
+
+Dependencies are installed in the Dockerfile (`pip3 install ...`). If you manually installed extra packages inside the container, they will be lost on restart. Add new dependencies to both `Dockerfile` and `requirements.txt`, then rebuild.

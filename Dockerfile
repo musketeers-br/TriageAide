@@ -23,3 +23,5 @@ ADD --chown=${ISC_PACKAGE_MGRUSER}:${ISC_PACKAGE_IRISGROUP} https://github.com/g
 RUN --mount=type=bind,source=/,target=/builder/root,from=builder \
     cp -f /builder/root/usr/irissys/iris.cpf /usr/irissys/iris.cpf && \
     python3 /irisdev/app/copy-data.py -c /usr/irissys/iris.cpf -d /builder/root/
+
+RUN pip3 install requests python-dotenv fastmcp langchain langchain-mcp-adapters langchain-openai langchain-community gradio 2>&1 | tail -1

@@ -1,0 +1,45 @@
+{
+  "patient": "Maria Silva",
+  "violations": [],
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Quero iniciar a triagem para a paciente Maria Silva",
+      "agent": "Maria, como você está se sentindo hoje?",
+      "question_count": 1
+    },
+    {
+      "turn": 2,
+      "user": "Nao muito bem, estou sentindo muita sede e cansaco",
+      "agent": "Notei que você tem diabetes. Seu açúcar anda controlado ultimamente?",
+      "question_count": 1
+    },
+    {
+      "turn": 3,
+      "user": "Sim, tenho notado que estou urinando muito mais que o normal",
+      "agent": "Teve aumento de sede, fome ou urina nos últimos dias?",
+      "question_count": 1
+    },
+    {
+      "turn": 4,
+      "user": "Nao, minha visao esta normal",
+      "agent": "Notou alguma mudança na visão?",
+      "question_count": 1
+    },
+    {
+      "turn": 5,
+      "user": "Sim, as vezes sinto tontura",
+      "agent": "Sua pressão tem sido controlada ultimamente?",
+      "question_count": 1
+    },
+    {
+      "turn": 6,
+      "user": "Nao, nao notei inchaco nas pernas",
+      "agent": "Sentiu tontura ou dor de cabeça recentemente?",
+      "question_count": 1
+    }
+  ],
+  "total_questions": 6,
+  "unique_questions": 6,
+  "has_fhir_context": true
+}

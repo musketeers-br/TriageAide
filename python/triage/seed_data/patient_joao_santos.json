@@ -1,0 +1,251 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:joao-santos-patient",
+      "resource": {
+        "resourceType": "Patient",
+        "name": [
+          {
+            "use": "official",
+            "family": "Santos",
+            "given": ["Joao"]
+          }
+        ],
+        "gender": "male",
+        "birthDate": "1954-11-20",
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "+55-11-98888-5678",
+            "use": "mobile"
+          }
+        ],
+        "identifier": [
+          {
+            "system": "http://hospital.smarthealthit.org",
+            "value": "joao-santos-1954"
+          }
+        ],
+        "address": [
+          {
+            "line": ["Av. Paulista, 1000"],
+            "city": "Sao Paulo",
+            "state": "SP",
+            "postalCode": "01310-100",
+            "country": "BR"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Patient" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-ic",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed" }] },
+        "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "I50", "display": "Chronic heart failure" }], "text": "Insuficiencia cardiaca cronica" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "onsetDateTime": "2020-03-15"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-fa",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed" }] },
+        "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "I48", "display": "Atrial fibrillation" }], "text": "Fibrilacao atrial" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "onsetDateTime": "2019-08-01"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-dm2",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed" }] },
+        "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "E11", "display": "Type 2 diabetes mellitus" }], "text": "Diabetes tipo 2" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "onsetDateTime": "2012-01-10"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-has",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed" }] },
+        "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "I10", "display": "Essential hypertension" }], "text": "Hipertensao arterial" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "onsetDateTime": "2008-05-01"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-drc",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed" }] },
+        "code": { "coding": [{ "system": "http://hl7.org/fhir/sid/icd-10", "code": "N18.3", "display": "Chronic kidney disease stage 3" }], "text": "DRC estagio 3" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "onsetDateTime": "2021-06-01"
+      },
+      "request": { "method": "POST", "url": "Condition" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-warfarina",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": { "coding": [{ "system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "11289", "display": "Warfarin 5 MG Oral Tablet" }], "text": "Warfarina 5mg" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "authoredOn": "2019-08-05",
+        "dosageInstruction": [{ "text": "1 comprimido ao dia", "timing": { "repeat": { "frequency": 1, "period": 1, "periodUnit": "d" } } }]
+      },
+      "request": { "method": "POST", "url": "MedicationRequest" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-metformina",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": { "coding": [{ "system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "860975", "display": "Metformin 1000 MG Oral Tablet" }], "text": "Metformina 1000mg" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "authoredOn": "2012-01-15",
+        "dosageInstruction": [{ "text": "1 comprimido de 12/12h", "timing": { "repeat": { "frequency": 2, "period": 1, "periodUnit": "d" } } }]
+      },
+      "request": { "method": "POST", "url": "MedicationRequest" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-enalapril",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": { "coding": [{ "system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "318072", "display": "Enalapril 20 MG Oral Tablet" }], "text": "Enalapril 20mg" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "authoredOn": "2020-03-20",
+        "dosageInstruction": [{ "text": "1 comprimido ao dia", "timing": { "repeat": { "frequency": 1, "period": 1, "periodUnit": "d" } } }]
+      },
+      "request": { "method": "POST", "url": "MedicationRequest" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-furosemida",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": { "coding": [{ "system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "460419", "display": "Furosemide 40 MG Oral Tablet" }], "text": "Furosemida 40mg" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "authoredOn": "2020-03-20",
+        "dosageInstruction": [{ "text": "1 comprimido ao dia", "timing": { "repeat": { "frequency": 1, "period": 1, "periodUnit": "d" } } }]
+      },
+      "request": { "method": "POST", "url": "MedicationRequest" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-hba1c",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "4548-4", "display": "Hemoglobin A1c/Hemoglobin.total in Blood" }], "text": "HbA1c" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "effectiveDateTime": "2026-01-10T08:00:00-03:00",
+        "valueQuantity": { "value": 7.1, "unit": "%", "system": "http://unitsofmeasure.org", "code": "%" }
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-inr",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "6301-3", "display": "INR in Platelet poor plasma" }], "text": "INR" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "effectiveDateTime": "2026-01-10T08:00:00-03:00",
+        "valueQuantity": { "value": 2.8, "unit": "{INR}", "system": "http://unitsofmeasure.org", "code": "{INR}" }
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-creatinina",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "2160-0", "display": "Creatinine [Mass/volume] in Serum or Plasma" }], "text": "Creatinina" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "effectiveDateTime": "2026-01-10T08:00:00-03:00",
+        "valueQuantity": { "value": 2.1, "unit": "mg/dL", "system": "http://unitsofmeasure.org", "code": "mg/dL" },
+        "interpretation": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation", "code": "H", "display": "High" }] }]
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-bnp",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "30934-4", "display": "BNP [Mass/volume] in Serum or Plasma" }], "text": "BNP" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "effectiveDateTime": "2026-01-10T08:00:00-03:00",
+        "valueQuantity": { "value": 450, "unit": "pg/mL", "system": "http://unitsofmeasure.org", "code": "pg/mL" },
+        "interpretation": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation", "code": "H", "display": "High" }] }]
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-fe",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "procedure" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "10230-1", "display": "Ejection fraction" }], "text": "Fracao de ejecao" },
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "effectiveDateTime": "2025-12-01T08:00:00-03:00",
+        "valueQuantity": { "value": 35, "unit": "%", "system": "http://unitsofmeasure.org", "code": "%" },
+        "interpretation": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation", "code": "L", "display": "Low" }] }]
+      },
+      "request": { "method": "POST", "url": "Observation" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-alergia-aas",
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical", "code": "active" }] },
+        "verificationStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification", "code": "confirmed" }] },
+        "type": "allergy",
+        "category": ["medication"],
+        "criticality": "high",
+        "code": { "coding": [{ "system": "http://snomed.info/sct", "code": "119364006", "display": "Substance with aspirin" }], "text": "AAS (Aspirina)" },
+        "patient": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "reaction": [{ "manifestation": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "39997004", "display": "Exacerbation of asthma" }], "text": "Piora da asma" }], "severity": "severe" }]
+      },
+      "request": { "method": "POST", "url": "AllergyIntolerance" }
+    },
+    {
+      "fullUrl": "urn:uuid:joao-santos-encounter",
+      "resource": {
+        "resourceType": "Encounter",
+        "status": "finished",
+        "class": { "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "AMB", "display": "ambulatory" },
+        "type": [{ "coding": [{ "system": "http://snomed.info/sct", "code": "225719005", "display": "Cardiology follow-up encounter" }], "text": "Follow-up Cardiologia" }],
+        "subject": { "reference": "urn:uuid:joao-santos-patient", "display": "Joao Santos" },
+        "period": { "start": "2026-01-10T08:00:00-03:00", "end": "2026-01-10T08:50:00-03:00" }
+      },
+      "request": { "method": "POST", "url": "Encounter" }
+    }
+  ]
+}

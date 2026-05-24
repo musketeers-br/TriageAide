@@ -1,0 +1,77 @@
+{
+  "patient": "Roberto Lima",
+  "violations": [
+    "TURN 4: 2 perguntas em uma mensagem (esperava max 1)"
+  ],
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Quero iniciar a triagem para o paciente Roberto Lima",
+      "agent": "Roberto, como você está se sentindo hoje?",
+      "question_count": 1
+    },
+    {
+      "turn": 2,
+      "user": "Estou com falta de ar pior que o normal e tosse com catarro",
+      "agent": "Entendi, Roberto. Você mencionou que está com falta de ar e tosse com catarro. A sua falta de ar piorou nos últimos dias?",
+      "question_count": 1
+    },
+    {
+      "turn": 3,
+      "user": "Sim, a tosse piora de manha e o catarro esta mais amarelado",
+      "agent": "Você comentou que a tosse piora de manhã e o catarro está mais amarelado. Agora, você teve tosse com mais secreção ou diferente do habitual?",
+      "question_count": 1
+    },
+    {
+      "turn": 4,
+      "user": "Sim, tenho sentido mais cansaco do que o normal, ate para coisas simples",
+      "agent": "Você mencionou que tem sentido mais cansaço do que o normal, até para coisas simples. Agora, como anda a sua pressão arterial? Tem sido controlada ultimamente?",
+      "question_count": 2
+    },
+    {
+      "turn": 5,
+      "user": "Nao, nao tive febre",
+      "agent": "Roberto, você mencionou que não teve febre. Recentemente, você sentiu tontura ou dor de cabeça?",
+      "question_count": 1
+    },
+    {
+      "turn": 6,
+      "user": "Sim, tenho sentido triste e sem vontade de fazer nada ultimamente",
+      "agent": "Você mencionou que tem se sentido triste e sem vontade de fazer nada. Agora, você notou inchaço nas pernas?",
+      "question_count": 1
+    },
+    {
+      "turn": 7,
+      "user": "Nao, nao parei de tomar a sertralina, mas nao sinto melhora",
+      "agent": "Você mencionou que não parou de tomar a sertralina, mas não tem sentido melhora. Agora, notou inchaço nas pernas?",
+      "question_count": 1
+    },
+    {
+      "turn": 8,
+      "user": "Sim, a dor no joelho esta pior, principalmente para subir escadas",
+      "agent": "Você mencionou que a dor no joelho está pior, especialmente ao subir escadas. Como está a dor no joelho atualmente?",
+      "question_count": 1
+    },
+    {
+      "turn": 9,
+      "user": "Nao, nao tomei dipirona, sei que sou alergico e pode dar choque",
+      "agent": "Você mencionou que não tomou dipirona por ser alérgico. Agora, me diga, a dor no joelho afeta suas atividades diárias?",
+      "question_count": 1
+    },
+    {
+      "turn": 10,
+      "user": "Sim, tenho usado o paracetamol quando a dor fica forte",
+      "agent": "Você mencionou que tem usado paracetamol quando a dor fica forte. Agora, Roberto, você teve pensamentos de se machucar ou desistir?",
+      "question_count": 1
+    },
+    {
+      "turn": 11,
+      "user": "Nao, nao medi a saturacao em casa, mas sinto que esta mais dificil respirar",
+      "agent": "Entendi, Roberto. Você mencionou que sente que está mais difícil respirar, mas não mediu a saturação. \n\nNeste momento, não identifiquei sinais críticos de alerta, mas é importante que você siga monitorando esses sintomas e busque ajuda médica se a dificuldade para respirar aumentar.\n\nAgora, para finalizar nossa triagem, gostaria de revisar algumas informações e realizar um resumo clínico. \n\n### Resumo Clinico Pre-Consulta\n- **Paciente:** Roberto Lima (62 anos)\n- **Condicoes ativas:** \n  - DPOC\n ",
+      "question_count": 0
+    }
+  ],
+  "total_questions": 11,
+  "unique_questions": 11,
+  "has_fhir_context": true
+}

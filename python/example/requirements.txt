@@ -1,0 +1,11 @@
+# para os agentes
+langchain
+langchain-mcp-adapters
+langchain-google-genai
+langchain-openai
+
+# para o mcp server
+fastmcp
+
+# geral
+python-dotenv

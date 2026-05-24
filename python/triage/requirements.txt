@@ -1,0 +1,8 @@
+langchain
+langchain-mcp-adapters
+langchain-openai
+langchain-community
+fastmcp
+python-dotenv
+requests
+gradio

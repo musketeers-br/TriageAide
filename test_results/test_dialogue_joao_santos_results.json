@@ -1,0 +1,69 @@
+{
+  "patient": "Joao Santos",
+  "violations": [],
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Quero iniciar a triagem para o paciente Joao Santos",
+      "agent": "João, como você está se sentindo hoje?",
+      "question_count": 1
+    },
+    {
+      "turn": 2,
+      "user": "Nao estou me sentindo bem, estou com falta de ar e cansaco",
+      "agent": "João, você teve falta de ar ao deitar ou ao subir escadas?",
+      "question_count": 1
+    },
+    {
+      "turn": 3,
+      "user": "Sim, tenho notado inchaco nas pernas e pes, principalmente a noite",
+      "agent": "João, você notou inchaço nas pernas ou no abdômen?",
+      "question_count": 1
+    },
+    {
+      "turn": 4,
+      "user": "Nao, nao senti nenhuma dor no peito",
+      "agent": "João, você sentiu palpitação ou coração acelerado recentemente?",
+      "question_count": 1
+    },
+    {
+      "turn": 5,
+      "user": "Sim, tenho notado que esta urinando menos que o normal",
+      "agent": "João, notei que você tem diabetes. Seu açúcar anda controlado ultimamente?",
+      "question_count": 1
+    },
+    {
+      "turn": 6,
+      "user": "Nao, meu peso esta estavel, nao aumentei",
+      "agent": "João, você teve aumento de sede, fome ou urina nos últimos dias?",
+      "question_count": 1
+    },
+    {
+      "turn": 7,
+      "user": "Nao, nao tomei nenhuma dose de aspirina, sei que sou alergico",
+      "agent": "João, você notou alguma mudança na visão?",
+      "question_count": 1
+    },
+    {
+      "turn": 8,
+      "user": "Sim, tenho seguido a dieta e tomando os medicamentos certinho",
+      "agent": "João, sua pressão tem sido controlada ultimamente?",
+      "question_count": 1
+    },
+    {
+      "turn": 9,
+      "user": "Nao, nao fiz exames recentemente, o ultimo foi em janeiro",
+      "agent": "João, você sentiu tontura ou dor de cabeça recentemente?",
+      "question_count": 1
+    },
+    {
+      "turn": 10,
+      "user": "Sim, as vezes sinto tontura quando levanto rapido",
+      "agent": "João, você notou inchaço nas pernas?",
+      "question_count": 1
+    }
+  ],
+  "total_questions": 10,
+  "unique_questions": 10,
+  "has_fhir_context": true
+}
