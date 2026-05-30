@@ -2,6 +2,7 @@ langchain
 langchain-mcp-adapters
 langchain-openai
 langchain-community
+langsmith
 fastmcp
 python-dotenv
 requests

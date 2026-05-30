@@ -10,6 +10,12 @@ export FHIR_MCP_URL=http://localhost:8000/mcp
 export TRIAGE_MCP_URL=http://localhost:8001/mcp
 export CR_MCP_URL=http://localhost:8002/mcp
 
+if [ -n "$LANGSMITH_API_KEY" ]; then
+  export LANGSMITH_TRACING=true
+  export LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-triage-aide}
+  echo "LangSmith tracing enabled (project: $LANGSMITH_PROJECT)"
+fi
+
 if [ -z "$OPENAI_API_KEY" ]; then
     echo "ERROR: OPENAI_API_KEY not set"
     exit 1
