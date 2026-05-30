@@ -1,175 +1,175 @@
-# Progresso — Agente de Triagem Pre-Consulta
+# Progress — Pre-Consultation Triage Agent
 
-## Historico de Progresso
+## Progress History
 
-### Fase 1: Conceito e Planejamento
+### Phase 1: Concept and Planning
 
-- Definido o cenario FHIR-First: agente consulta historico ANTES de conversar com o paciente
-- Documentado em `doc/scenario1.md` (fluxo das 5 etapas) e `doc/app-description.md` (conceito)
-- Decisao arquitetural: 3 MCP servers (FHIR, Triage, Clinical Reasoning) + agente LangChain + Gradio UI
-- Decisao de stack: FastMCP (streamable-http), langchain-mcp-adapters, OpenAI gpt-4o-mini, Gradio
-- Decisao de idioma: agente responde em portugues brasileiro
-- Decisao de deployment: MCP servers rodam dentro do container Docker (nao externamente)
-- Criado `python/triage/PLAN.md` com especificacao completa de ferramentas e cenarios de teste
+- Defined the FHIR-First scenario: agent queries history BEFORE talking to the patient
+- Documented in `doc/scenario1.md` (5-step flow) and `doc/app-description.md` (concept)
+- Architectural decision: 3 MCP servers (FHIR, Triage, Clinical Reasoning) + agente LangChain + Gradio UI
+- Stack decision: FastMCP (streamable-http), langchain-mcp-adapters, OpenAI gpt-4o-mini, Gradio
+- Language decision: agent responds in English
+- Deployment decision: MCP servers run inside the Docker container (not externally)
+- Created `python/triage/PLAN.md` with complete tool specifications and test scenarios
 
-### Fase 2: Implementacao dos MCP Servers
+### Phase 2: MCP Servers Implementation
 
-- **fhir_server.py** (porta 8000): 11 ferramentas CRUD FHIR implementadas
-  - 6 ferramentas de leitura: get_patient, get_patient_conditions, get_patient_medications, get_patient_observations, get_patient_allergies, get_patient_encounters
-  - 5 ferramentas de escrita: create_observation, create_condition, create_questionnaire_response, create_encounter, create_flag_and_task
-  - Descoberta critica: IRIS FHIR Server retorna HTTP 201 com body vazio em POSTs. O ID do recurso criado vem no header `Location` no formato `http://host/fhir/r4/ResourceType/ID/_history/1`. Fix implementado em `_fhir_post()`.
-- **triage_server.py** (porta 8001): 4 ferramentas implementadas
-  - `build_contextual_questions`: gera perguntas baseadas no historico FHIR (nao genericas)
-  - `parse_symptoms`: extrai sintomas, duracao, severidade do texto do paciente
-  - `check_red_flags`: cruza sintomas com condicoes existentes para identificar sinais de alerta
-  - `build_questionnaire_response_data`: monta QuestionnaireResponse FHIR estruturado
-- **clinical_reasoning_server.py** (porta 8002): 4 ferramentas implementadas
-  - `assess_clinical_risk`: scoring com pesos por condicao cronica, sintoma e observacao anormal
-  - `suggest_priority`: mapeia score para routine/urgent/emergency
-  - `generate_clinical_summary`: resumo clinico para o medico
-  - `identify_follow_up_tasks`: tarefas de follow-up baseadas em risco e gaps de cuidado
+- **fhir_server.py** (port 8000): 11 FHIR CRUD tools implemented
+- 6 read tools: get_patient, get_patient_conditions, get_patient_medications, get_patient_observations, get_patient_allergies, get_patient_encounters
+- 5 write tools: create_observation, create_condition, create_questionnaire_response, create_encounter, create_flag_and_task
+- Critical discovery: IRIS FHIR Server returns HTTP 201 with empty body on POSTs. The created resource ID is in the header `Location` in the format `http://host/fhir/r4/ResourceType/ID/_history/1`. Fix implemented in `_fhir_post()`.
+- **triage_server.py** (port 8001): 4 tools implemented
+- `build_contextual_questions`: generates questions based on FHIR history (not generic)
+- `parse_symptoms`: extracts symptoms, duration, severity from patient text
+- `check_red_flags`: cross-references symptoms with existing conditions to identify warning signs
+- `build_questionnaire_response_data`: builds structured FHIR QuestionnaireResponse
+- **clinical_reasoning_server.py** (port 8002): 4 tools implemented
+- `assess_clinical_risk`: scoring with weights by chronic condition, symptom and abnormal observation
+- `suggest_priority`: maps score to routine/urgent/emergency
+- `generate_clinical_summary`: clinical summary for the physician
+- `identify_follow_up_tasks`: follow-up tasks based on risk and care gaps
 
-### Fase 3: Agente Orquestrador
+### Phase 3: Orchestrator Agent
 
-- **agent.py**: Core do agente (SYSTEM_PROMPT, create_triage_agent(), extract_ai_response())
-- **cli.py**: Interface CLI interativa (importa de agent.py)
-- **app.py**: Gradio ChatInterface web (importa de agent.py)
-  - Descoberta: Gradio 6.x removeu o parametro `type="messages"`. History passado como `list[dict]` com `role`/`content`.
-  - Descoberta: `asyncio.run()` nao pode ser chamado dentro de loop async existente (Gradio). Usado `asyncio.get_event_loop().run_until_complete()` ou abordagem equivalente.
-- System prompt detalhado com as 5 etapas obrigatorias, regras de idioma e formato de saida
+- **agent.py**: Agent core (SYSTEM_PROMPT, create_triage_agent(), extract_ai_response())
+- **cli.py**: Interactive CLI interface (imports from agent.py)
+- **app.py**: Gradio ChatInterface web (imports from agent.py)
+- Discovery: Gradio 6.x removed the parameter `type="messages"`. History passed as `list[dict]` with `role`/`content`.
+- Discovery: `asyncio.run()` cannot be called inside existing async loop (Gradio). Used `asyncio.get_event_loop().run_until_complete()` or equivalent approach.
+- Detailed system prompt with 5 mandatory steps, language and output format rules
 
-### Fase 4: Dados de Teste (seed_data.py)
+### Phase 4: Test Data (seed_data.py)
 
-- Criados 4 bundles FHIR JSON completos em `seed_data/`:
-  - **Maria Silva**: DM2 + HAS + HbA1c 8.2% + Metformina + Losartana + Alergia Penicilina
-  - **Joao Santos**: IC + FA + DM2 + HAS + DRC estagio 3 + Warfarina + Alergia AAS
-  - **Ana Costa**: Sem condicoes ativas, sem medicamentos
-  - **Roberto Lima**: DPOC + HAS + Artrose + Depressao + SpO2 93% + Alergia Dipirona (anafilaxia)
-- **Descoberta critica**: Bundles FHIR com `urn:uuid:` references nao funcionam com POSTs individuais no IRIS FHIR Server. Rewrite do seed_data.py para: (1) criar Patient primeiro, (2) resolver todas as `urn:uuid:` references para `Patient/{actual_id}`, (3) criar recursos dependentes.
-- Funcionalidades: `load` (carrega pacientes), `clean` (remove pacientes com tag `triage-seed`), `list` (lista pacientes carregados)
-- Pacientes marcados com tag `triage-seed` para facilitar identificacao e limpeza
+- Created 4 complete FHIR JSON bundles in `seed_data/`:
+- **Maria Silva**: DM2 + HAS + HbA1c 8.2% + Metformin + Losartan + Penicillin Allergy
+- **Joao Santos**: IC + FA + DM2 + HAS + CKD stage 3 + Warfarin + ASA Allergy
+- **Ana Costa**: No active conditions, no medications
+- **Roberto Lima**: COPD + HAS + Osteoarthritis + Depression + SpO2 93% + Dipyrone Allergy (anaphylaxis)
+- **Critical discovery**: FHIR Bundles with `urn:uuid:` references don't work with individual POSTs in IRIS FHIR Server. Rewrite of seed_data.py to: (1) create Patient first, (2) resolve all `urn:uuid:` references to `Patient/{actual_id}`, (3) create dependent resources.
+- Features: `load` (loads patients), `clean` (removes patients with tag `triage-seed`), `list` (lists loaded patients)
+- Patients tagged with `triage-seed` to facilitate identification and cleanup
 
-### Fase 5: Infraestrutura Docker
+### Phase 5: Docker Infrastructure
 
-- **Dockerfile**: adicionada linha `pip3 install requests python-dotenv fastmcp langchain langchain-mcp-adapters langchain-openai gradio`
-- **docker-compose.yml**: portas adicionadas 8000, 8001, 8002, 7860; entrypoint customizado
-- **custom-entrypoint.sh**: wrapper que inicia MCP servers em background antes do entrypoint IRIS
-- **start_mcp_servers.sh**: script que (1) le OPENAI_API_KEY do .env, (2) starta 3 MCP servers, (3) aguarda readiness, (4) carrega seed data automaticamente se nao existir
-- **start_servers.sh** (dentro de python/triage): versao manual para debug, start MCP servers + Gradio em foreground
+- **Dockerfile**: added line `pip3 install requests python-dotenv fastmcp langchain langchain-mcp-adapters langchain-openai gradio`
+- **docker-compose.yml**: ports added 8000, 8001, 8002, 7860; custom entrypoint
+- **custom-entrypoint.sh**: wrapper that starts MCP servers in background before IRIS entrypoint
+- **start_mcp_servers.sh**: script that (1) reads OPENAI_API_KEY from .env, (2) starts 3 MCP servers, (3) waits for readiness, (4) loads seed data automatically if not present
+- **start_servers.sh** (inside python/triage): manual version for debugging, start MCP servers + Gradio in foreground
 
-### Fase 6: Teste End-to-End
+### Phase 6: End-to-End Test
 
-- Teste completo com Maria Silva: agente consultou FHIR, gerou perguntas contextuais, analisou sintomas, avaliou risco (moderate), criou Encounter resource de volta no FHIR
+- Complete test with Maria Silva: agent queried FHIR, generated contextual questions, analyzed symptoms, assessed risk (moderate), created Encounter resource back in FHIR
 
-### Fase 7: Bugfixes Criticos
+### Phase 7: Critical Bugfixes
 
-- **Bug: Gradio nao iniciava no boot do container** — `start_mcp_servers.sh` so iniciava os 3 MCP servers, nao o `app.py`. Adicionadas linhas para start do Gradio em background.
-- **Bug: MCP sessions fechavam apos `_get_agent()`** — O padrao `async with _client.session(...)` carregava as ferramentas dentro de um context manager que fechava as sessoes MCP ao retornar. Quando o agente tentava chamar uma ferramenta, a sessao ja estava fechada. Solucao: usar `_client.get_tools()` que cria sessoes por chamada, em vez de `load_mcp_tools(session)` dentro de context manager.
-- **Bug: Agente chamava `get_patient("Maria Silva")` em vez do ID** — O LLM nao sabia que precisava do ID numerico. Solucao: adicionada ferramenta `search_patients(name)` ao fhir_server.py com busca multi-estrategia (family, given, name).
-- **Bug: IRIS FHIR `name` param nao suporta nome completo** — `?name=Maria Silva` retorna 0 resultados. `?family=Silva` ou `?given=Maria` funciona. Solucao: `search_patients` tenta multiplas estrategias (family, given, name parcial).
-- Validacao do fluxo completo das 5 etapas
+- **Bug: Gradio didn't start on container boot** — `start_mcp_servers.sh` only started the 3 MCP servers, not `app.py`. Added lines to start Gradio in background.
+- **Bug: MCP sessions closed after `_get_agent()`** — The `async with _client.session(...)` pattern loaded tools inside a context manager which closed MCP sessions on return. When the agent tried to call a tool, the session was already closed. Solution: use `_client.get_tools()` which creates sessions per call, instead of `load_mcp_tools(session)` inside context manager.
+- **Bug: Agent called `get_patient("Maria Silva")` instead of ID** — The LLM didn't know it needed the numeric ID. Solution: added `search_patients(name)` tool to fhir_server.py with multi-strategy search (family, given, name).
+- **Bug: IRIS FHIR `name` param doesn't support full name** — `?name=Maria Silva` returns 0 results. `?family=Silva` or `?given=Maria` works. Solution: `search_patients` tries multiple strategies (family, given, partial name).
+- Validation of the complete 5-step flow
 
 ---
 
-## Descobertas Tecnicas (Lessons Learned)
+## Technical Discoveries (Lessons Learned)
 
-### 1. IRIS FHIR Server: POST retorna body vazio (HTTP 201)
+### 1. IRIS FHIR Server: POST returns empty body (HTTP 201)
 
-O InterSystems IRIS for Health FHIR Server retorna HTTP 201 Created com **body vazio** ao criar recursos via POST. O ID do recurso criado esta no header `Location`:
+The InterSystems IRIS for Health FHIR Server returns HTTP 201 Created with an **empty body** when creating resources via POST. The created resource ID is in the `Location` header:
 
 ```
 Location: http://host/fhir/r4/Patient/123/_history/1
 ```
 
-**Impacto**: Qualquer codigo que faca `resp.json()` apos um POST vai falhar com JSONDecodeError.
+**Impact**: Any code that does `resp.json()` after a POST will fail with JSONDecodeError.
 
-**Solucao**: `_fhir_post()` extrai o ID do header Location via regex e retorna `{"id": extracted_id}` em vez de `resp.json()`.
+**Solution**: `_fhir_post()` extracts the ID from the Location header via regex and returns `{"id": extracted_id}` instead of `resp.json()`.
 
-### 2. Referencias `urn:uuid:` nao funcionam com POSTs individuais
+### 2. `urn:uuid:` references don't work with individual POSTs
 
-Bundles FHIR transacionais com `urn:uuid:` references pressupoem que o servidor resolve as referencias no contexto do bundle. O IRIS FHIR Server (via POSTs individuais fora de transaction) nao resolve essas referencias.
+Transactional FHIR Bundles with `urn:uuid:` references assume that the server resolves references in the bundle context. The IRIS FHIR Server (via individual POSTs outside of transaction) doesn't resolve these references.
 
-**Solucao**: Rewrite do `seed_data.py` para criar o Patient primeiro, extrair o ID real, e substituir todas as ocorrencias de `urn:uuid:` pelo `Patient/{actual_id}` antes de criar os recursos dependentes.
+**Solution**: Rewrite of `seed_data.py` to create the Patient first, extract the real ID, and replace all occurrences of `urn:uuid:` with `Patient/{actual_id}` before creating dependent resources.
 
-### 3. `load_dotenv()` NAO sobrescreve variaveis de ambiente existentes
+### 3. `load_dotenv()` does NOT override existing environment variables
 
-Se uma variavel de ambiente ja esta definida no shell (via `export`), `load_dotenv()` nao a sobrescreve. Isso causa confusao quando `start_servers.sh` faz `export FHIR_BASE_URL=http://localhost:52773/fhir/r4` (porta interna do container) mas o `.env` tem `http://localhost:32783/fhir/r4` (porta do host).
+If an environment variable is already defined in the shell (via `export`), `load_dotenv()` does not override it. This causes confusion when `start_servers.sh` does `export FHIR_BASE_URL=http://localhost:52773/fhir/r4` (container internal port) but the `.env` has `http://localhost:32783/fhir/r4` (host port).
 
-**Solucao**: `start_servers.sh` e `start_mcp_servers.sh` exportam `FHIR_BASE_URL` com a porta interna (52773) explicitamente antes de rodar os servidores. O `.env` fica com a porta do host (32783) para uso quando rodando fora do container.
+**Solution**: `start_servers.sh` and `start_mcp_servers.sh` export `FHIR_BASE_URL` with the internal port (52773) explicitly before running the servers. The `.env` has the host port (32783) for use when running outside the container.
 
-### 4. Pip installs em container rodando sao perdidos no restart
+### 4. Pip installs in a running container are lost on restart
 
-Qualquer `pip install` feito manualmente dentro do container e perdido quando o container e recriado.
+Any `pip install` done manually inside the container is lost when the container is recreated.
 
-**Solucao**: Todas as dependencias do triage foram adicionadas ao Dockerfile na linha `pip3 install ...`. Para novas dependencias, atualizar Dockerfile + requirements.txt e rebuild.
+**Solution**: All triage dependencies were added to the Dockerfile in the line `pip3 install ...`. For new dependencies, update Dockerfile + requirements.txt and rebuild.
 
 ### 5. Gradio 6.x: API changes
 
-- `gr.ChatInterface` nao aceita mais o parametro `type="messages"`
-- History e passado como `list[dict]` com chaves `role` e `content`
-- Nao e possivel chamar `asyncio.run()` dentro de um event loop existente (Gradio roda async internamente)
+- `gr.ChatInterface` no longer accepts the parameter `type="messages"`
+- History is passed as `list[dict]` with keys `role` and `content`
+- Cannot call `asyncio.run()` inside an existing event loop (Gradio runs async internally)
 
-**Solucao**: Removido `type="messages"`, ajustado formato do history, usado gerenciamento adequado de event loop async.
+**Solution**: Removed `type="messages"`, adjusted history format, used proper async event loop management.
 
-### 6. `create_agent()` suporta `system_prompt`
+### 6. `create_agent()` supports `system_prompt`
 
-A funcao `create_agent()` do `langchain.agents` aceita o parametro `system_prompt`. Isso e melhor do que pre-prepender `SystemMessage` manualmente na lista de mensagens, pois o framework gerencia o system prompt de forma mais robusta.
+The `create_agent()` function from `langchain.agents` accepts the parameter `system_prompt`. This is better than manually pre-pending `SystemMessage` to the message list, since the framework manages the system prompt more robustly.
 
-### 7. MCP sessions via `async with` fecham apos o context manager
+### 7. MCP sessions via `async with` close after the context manager
 
-Usar `async with _client.session("server")` para carregar ferramentas e perigoso: as sessoes MCP sao fechadas quando o bloco `async with` termina. O agente entao nao consegue chamar as ferramentas porque as sessoes estao mortas.
+Using `async with _client.session("server")` to load tools is dangerous: MCP sessions are closed when the `async with` block ends. The agent then cannot call the tools because the sessions are dead.
 
-**Solucao**: Usar `_client.get_tools()` que carrega ferramentas criando sessoes por chamada (cada tool call abre e fecha sua propria sessao). Nao usar `load_mcp_tools(session)` dentro de context manager para criar o agente.
+**Solution**: Use `_client.get_tools()` which loads tools creating sessions per call (each tool call opens and closes its own session). Do not use `load_mcp_tools(session)` inside context manager to create the agent.
 
-### 8. IRIS FHIR `name` search param nao suporta nome completo
+### 8. IRIS FHIR `name` search param doesn't support full name
 
-O parametro `?name=Maria Silva` retorna 0 resultados no IRIS FHIR Server. A busca funciona apenas com partes do nome: `?family=Silva` ou `?given=Maria`.
+The parameter `?name=Maria Silva` returns 0 results in the IRIS FHIR Server. Search works only with name parts: `?family=Silva` or `?given=Maria`.
 
-**Solucao**: `search_patients()` tenta multiplas estrategias: (1) `family` + `given` separados, (2) `name` com cada parte individualmente. Para na primeira que retorna resultados.
+**Solution**: `search_patients()` tries multiple strategies: (1) `family` + `given` separately, (2) `name` with each part individually. Stops at the first one that returns results.
 
 ---
 
-## Decisoes Arquiteturais
+## Architectural Decisions
 
-| Decisao | Alternativa Considerada | Justificativa |
+| Decision | Alternative Considered | Justification |
 |---|---|---|
-| 3 MCP servers separados | 1 MCP server monolitico | Separacao de responsabilidades: FHIR (dados), Triage (logica de triagem), Clinical Reasoning (raciocinio). Facilita manutencao e extensao. |
-| FastMCP streamable-http | stdio transport | Streamable-http permite que os servicos rodem em portas separadas e sejam acessiveis via HTTP, compativel com containerizacao. |
-| gpt-4o-mini | gpt-4o, gpt-3.5-turbo | Custo-beneficio: gpt-4o-mini e barato e competente para triagem. gpt-4o seria overkill para o escopo. |
-| MCP servers dentro do container | MCP servers fora do container | Simplifica deployment: tudo sobe junto com `docker compose up`. Nao requer configuracao de rede externa para os MCP servers. |
-| LangChain + langchain-mcp-adapters | MCP client customizado | langchain-mcp-adapters ja resolve a integracao MCP → LangChain tools. Evita reinventar a roda. |
-| Gradio | Streamlit, Flask | Gradio ChatInterface e o mais simples para prototipar um chat. Streamlit exigiria mais codigo para o mesmo resultado. |
-| seed_data.py com tag `triage-seed` | Remocao manual de recursos | Tag permite `clean` automatico: remove todos os recursos com a tag, sem precisar trackear IDs. |
-| System prompt embutido no codigo | Prompt externo em arquivo | Simplifica deployment (1 arquivo a menos). Se precisar tornar configuravel, extrair para arquivo depois. |
+| 3 separate MCP servers | 1 monolithic MCP server | Separation of responsibilities: FHIR (data), Triage (triage logic), Clinical Reasoning (reasoning). Facilitates maintenance and extension. |
+| FastMCP streamable-http | stdio transport | Streamable-http allows services to run on separate ports and be accessible via HTTP, compatible with containerization. |
+| gpt-4o-mini | gpt-4o, gpt-3.5-turbo | Cost-benefit: gpt-4o-mini is cheap and competent for triage. gpt-4o would be overkill for the scope. |
+| MCP servers inside the container | MCP servers outside the container | Simplifies deployment: everything starts together with `docker compose up`. Does not require external network configuration for the MCP servers. |
+| LangChain + langchain-mcp-adapters | Custom MCP client | langchain-mcp-adapters already solves MCP → LangChain tools integration. Avoids reinventing the wheel. |
+| Gradio | Streamlit, Flask | Gradio ChatInterface is the simplest for prototyping a chat. Streamlit would require more code for the same result. |
+| seed_data.py with `triage-seed` tag | Manual resource removal | Tag allows automatic `clean`: removes all resources with the tag, without needing to track IDs. |
+| System prompt embedded in code | External prompt in file | Simplifies deployment (1 fewer file). If it needs to be configurable, extract to file later. |
 
 ---
 
-## Status Atual
+## Current Status
 
-### Concluido
+### Completed
 
-- [x] 3 MCP servers (FHIR, Triage, Clinical Reasoning) implementados e rodando
-- [x] Core do agente (`agent.py`), CLI (`cli.py`) e Web UI (`app.py`) funcionais
-- [x] 4 pacientes de teste com bundles FHIR completos
-- [x] Seed data com load/clean/list
-- [x] Infraestrutura Docker completa (Dockerfile, docker-compose, entrypoint customizado)
-- [x] Auto-startup dos MCP servers + seed data no container
-- [x] Teste end-to-end com Maria Silva
-- [x] Documentacao (README, PROGRESS, PLAN atualizado)
-- [x] Testar Gradio UI externamente (porta 7860 do host)
-- [x] Testar com todos os 4 pacientes (Joao, Ana, Roberto)
+- [x] 3 MCP servers (FHIR, Triage, Clinical Reasoning) implemented and running
+- [x] Agent core (`agent.py`), CLI (`cli.py`) and Web UI (`app.py`) functional
+- [x] 4 test patients with complete FHIR bundles
+- [x] Seed data with load/clean/list
+- [x] Complete Docker infrastructure (Dockerfile, docker-compose, custom entrypoint)
+- [x] Auto-startup of MCP servers + seed data in container
+- [x] End-to-end test with Maria Silva
+- [x] Documentation (README, PROGRESS, updated PLAN)
+- [x] Test Gradio UI externally (host port 7860)
+- [x] Test with all 4 patients (Joao, Ana, Roberto)
 
-### Pendente / Precisa Atencao
+### Pending / Needs Attention
 
-- [ ] Agente nem sempre cria todos os recursos FHIR esperados (Flag, Task, QuestionnaireResponse) — depende da decisao do LLM; pode precisar ajuste de prompt
-- [ ] Adicionar ferramenta para buscar pacientes por nome (atualmente so funciona por ID)
-- [ ] Container restart test para validar pipeline completo de auto-startup
+- [ ] Agent doesn't always create all expected FHIR resources (Flag, Task, QuestionnaireResponse) — depends on the LLM's decision; may need prompt adjustment
+- [ ] Add tool to search patients by name (currently only works by ID)
+- [ ] Container restart test to validate complete auto-startup pipeline
 
-### Trabalho Futuro / Nice-to-have
+### Future Work / Nice-to-have
 
-- [ ] Interacao por voz (mencionado em `doc/app-description.md`, nao implementado)
-- [ ] Prompt refinement para garantir criacao consistente de QuestionnaireResponse e Tasks
-- [ ] Preparacao para submissao ao concurso
-- [ ] Testes automatizados (atualmente so testes manuais via curl/Gradio)
-- [ ] Logging estruturado dos MCP servers
-- [ ] Health check endpoints nos MCP servers
+- [ ] Voice interaction (mentioned in `doc/app-description.md`, not implemented)
+- [ ] Prompt refinement to ensure consistent creation of QuestionnaireResponse and Tasks
+- [ ] Contest submission preparation
+- [ ] Automated tests (currently only manual tests via curl/Gradio)
+- [ ] Structured logging of MCP servers
+- [ ] Health check endpoints in MCP servers

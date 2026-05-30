@@ -1,228 +1,228 @@
-# Plano: Agente de Triagem Pre-Consulta — FHIR-First Agentic AI
+# Plan: Pre-Consultation Triage Agent — FHIR-First Agentic AI
 
-## Objetivo
+## Objective
 
-Construir uma aplicacao Python que implementa o cenario descrito em `doc/scenario1.md` — um **Agente de Triagem Pre-Consulta** que primeiro consulta o FHIR Server (InterSystems IRIS for Health), entende o historico do paciente, e depois conduz uma triagem inteligente personalizada, atualizando o prontuario FHIR de volta.
+Build a Python application that implements the scenario described in `doc/scenario1.md` — a **Pre-Consultation Triage Agent** that first queries the FHIR Server (InterSystems IRIS for Health), understands the patient's history, and then conducts personalized intelligent triage, updating the FHIR record back.
 
-## Arquitetura
+## Architecture
 
-``` 
+```
 FHIR Server (IRIS for Health :32783)
 |
-fhir_server.py (MCP :8000) — 12 ferramentas CRUD FHIR
+fhir_server.py (MCP :8000) — 12 FHIR CRUD tools
 |
-triage_server.py (MCP :8001) — 4 ferramentas de triagem contextual
+triage_server.py (MCP :8001) — 4 contextual triage tools
 |
-clinical_reasoning_server.py (MCP :8002) — 4 ferramentas de raciocinio clinico
+clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
 |
- agent.py (LangChain + OpenAI gpt-4o-mini) — core do agente (factory, system prompt)
- |
- cli.py — interface CLI interativa (importa de agent.py)
- app.py (Gradio) — UI web com chat para demo (:7860)
+agent.py (LangChain + OpenAI gpt-4o-mini) — agent core (factory, system prompt)
+|
+cli.py — interactive CLI interface (imports from agent.py)
+app.py (Gradio) — web chat UI for demo (:7860)
 ```
 
-## Fluxo do Agente (5 etapas do scenario1.md)
+## Agent Flow (5 steps from scenario1.md)
 
-1. **FHIR Query** — Agente consulta Patient, Condition, MedicationRequest, Observation, AllergyIntolerance, Encounter
-2. **Triagem Contextual** — Com historico em maos, gera perguntas inteligentes (nao genericas)
-3. **Conversa Interativa** — Loop de chat onde o paciente responde, agente aprofunda
-4. **Clinical Reasoning** — Cruza historico FHIR + sintomas novos → avalia risco, sugere prioridade
-5. **FHIR Update** — Cria Observation, QuestionnaireResponse, Flag, Task, Encounter de volta no servidor
+1. **FHIR Query** — Agent queries Patient, Condition, MedicationRequest, Observation, AllergyIntolerance, Encounter
+2. **Contextual Triage** — With history in hand, generates intelligent questions (not generic)
+3. **Interactive Conversation** — Chat loop where the patient answers, agent deepens
+4. **Clinical Reasoning** — Crosses FHIR history + new symptoms → assesses risk, suggests priority
+5. **FHIR Update** — Creates Observation, QuestionnaireResponse, Flag, Task, Encounter back on the server
 
-## Dados de Teste (4 pacientes FHIR)
+## Test Data (4 FHIR patients)
 
-### Paciente 1: Maria Silva (cenario principal)
-- Feminino, 58 anos | Diabetes tipo 2 + Hipertensao | HbA1c 8.2% | Metformina + Losartana
-- Alergia a Penicilina | Ultima consulta ha 8 meses
-- **Esperado:** agente identifica diabetes descompensada, pergunta contextualmente, risco cardiovascular elevado
+### Patient 1: Maria Silva (main scenario)
+- Female, 58 years | Type 2 Diabetes + Hypertension | HbA1c 8.2% | Metformin + Losartan
+- Penicillin Allergy | Last consultation 8 months ago
+- **Expected:** agent identifies uncontrolled diabetes, asks contextual questions, elevated cardiovascular risk
 
-### Paciente 2: Joao Santos (cardiovascular complexo)
-- Masculino, 72 anos | IC + FA + DM2 + HAS + DRC estagio 3
-- Warfarina + Metformina + Enalapril + Furosemida | Alergia AAS
-- **Esperado:** polifarmacia, interacoes medicamentosas, risco alto
+### Patient 2: Joao Santos (complex cardiovascular)
+- Male, 72 years | HF + AF + DM2 + HTN + CKD stage 3
+- Warfarin + Metformin + Enalapril + Furosemide | ASA Allergy
+- **Expected:** polypharmacy, drug interactions, high risk
 
-### Paciente 3: Ana Costa (jovem, baixo risco)
-- Feminino, 28 anos | Nenhuma condicao ativa | Sem medicamentos
-- **Esperado:** perguntas genericas, sem red flags, prioridade routine
+### Patient 3: Ana Costa (young, low risk)
+- Female, 28 years | No active conditions | No medications
+- **Expected:** generic questions, no red flags, routine priority
 
-### Paciente 4: Roberto Lima (polipatologia + sinais de alerta)
-- Masculino, 65 anos | DPOC + HAS + Osteoartrite + Depressao
-- SpO2 93% | Alergia Dipirona (anafilaxia)
-- **Esperado:** red flags respiratorias + alergia grave, prioridade urgent/emergency
+### Patient 4: Roberto Lima (multiple conditions + warning signs)
+- Male, 65 years | COPD + HTN + Osteoarthritis + Depression
+- SpO2 93% | Dipyrone allergy (anaphylaxis)
+- **Expected:** respiratory red flags + severe allergy, urgent/emergency priority
 
-## Estrutura de Arquivos
+## File Structure
 
 ```
 python/triage/
-  .env                        # FHIR_BASE_URL, OPENAI_API_KEY — NAO tracked no git
-  .env.example                # Template sem credenciais
-  requirements.txt            # Dependencias Python
-  seed_data.py                # Script para carregar/limpar/listar pacientes de teste
-  seed_data/                  # Bundles FHIR JSON para carga
-    patient_maria_silva.json
-    patient_joao_santos.json
-    patient_ana_costa.json
-    patient_roberto_lima.json
-  fhir_server.py              # MCP Server 1 — FHIR CRUD (porta 8000)
-  triage_server.py            # MCP Server 2 — triagem contextual (porta 8001)
-  clinical_reasoning_server.py # MCP Server 3 — raciocinio clinico (porta 8002)
- agent.py # Core do agente (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
- cli.py # Interface CLI interativa
- app.py # UI Gradio chat — Web (:7860)
-  start_servers.sh            # Script para start dos 3 MCP servers + Gradio (manual)
-  PLAN.md                     # Este arquivo — plano de arquitetura
-  PROGRESS.md                 # Historico de progresso, descobertas e decisoes
-  README.md                   # Instrucoes de uso
+.env             # FHIR_BASE_URL, OPENAI_API_KEY — NOT tracked in git
+.env.example     # Template without credentials
+requirements.txt # Python dependencies
+seed_data.py     # Script to load/clean/list test patients
+seed_data/       # FHIR JSON bundles for loading
+  patient_maria_silva.json
+  patient_joao_santos.json
+  patient_ana_costa.json
+  patient_roberto_lima.json
+fhir_server.py   # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py # MCP Server 2 — contextual triage (port 8001)
+clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
+agent.py         # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+cli.py           # Interactive CLI interface
+app.py           # Gradio chat UI — Web (:7860)
+start_servers.sh # Script to start the 3 MCP servers + Gradio (manual)
+PLAN.md          # This file — architecture plan
+PROGRESS.md      # Progress history, discoveries and decisions
+README.md        # Usage instructions
 ```
 python/triage/
-  .env                    # FHIR_BASE_URL, OPENAI_API_KEY
-  requirements.txt        # dependencias
-  seed_data.py            # script para carregar pacientes de teste no FHIR
-  seed_data/              # bundles FHIR JSON para carga
-    patient_maria_silva.json
-    patient_joao_santos.json
-    patient_ana_costa.json
-    patient_roberto_lima.json
-  fhir_server.py          # MCP Server 1 — FHIR CRUD (porta 8000)
-  triage_server.py        # MCP Server 2 — triagem contextual (porta 8001)
-  clinical_reasoning_server.py  # MCP Server 3 — raciocinio clinico (porta 8002)
- agent.py # core do agente (factory, system prompt)
- cli.py # interface CLI interativa
- app.py # UI Gradio chat
-  README.md               # instrucoes de uso
+.env             # FHIR_BASE_URL, OPENAI_API_KEY
+requirements.txt # dependencies
+seed_data.py     # script to load test patients into FHIR
+seed_data/       # FHIR JSON bundles for loading
+  patient_maria_silva.json
+  patient_joao_santos.json
+  patient_ana_costa.json
+  patient_roberto_lima.json
+fhir_server.py   # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py # MCP Server 2 — contextual triage (port 8001)
+clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
+agent.py         # agent core (factory, system prompt)
+cli.py           # interactive CLI interface
+app.py           # Gradio chat UI
+README.md        # usage instructions
 ```
 
-## MCP Servers — Ferramentas
+## MCP Servers — Tools
 
-### fhir_server.py (porta 8000) — 12 ferramentas
+### fhir_server.py (port 8000) — 12 tools
 
-| Ferramenta | Metodo FHIR | Descricao |
+| Tool | FHIR Method | Description |
 |---|---|---|
-| `search_patients(name)` | GET /Patient?name={name} | Busca pacientes por nome (parcial) |
-| `get_patient(patient_id)` | GET /Patient/{id} | Demograficos |
-| `get_patient_conditions(patient_id)` | GET /Condition?patient={id} | Condicoes |
-| `get_patient_medications(patient_id)` | GET /MedicationRequest?patient={id} | Medicacoes |
-| `get_patient_observations(patient_id, code, _count)` | GET /Observation?patient={id} | Observacoes |
-| `get_patient_allergies(patient_id)` | GET /AllergyIntolerance?patient={id} | Alergias |
-| `get_patient_encounters(patient_id, _count)` | GET /Encounter?patient={id} | Encontros |
-| `create_observation(patient_id, code, display, value, unit, effective_date)` | POST /Observation | Nova observacao |
-| `create_condition(patient_id, code, display, clinical_status)` | POST /Condition | Nova condicao |
-| `create_questionnaire_response(patient_id, questions_responses)` | POST /QuestionnaireResponse | Triagem estruturada |
-| `create_encounter(patient_id, reason, priority)` | POST /Encounter | Encontro pre-consulta |
-| `create_flag_and_task(patient_id, flag_detail, task_detail, priority)` | POST /Flag + POST /Task | Alerta + follow-up |
+| `search_patients(name)` | GET /Patient?name={name} | Search patients by name (partial) |
+| `get_patient(patient_id)` | GET /Patient/{id} | Demographics |
+| `get_patient_conditions(patient_id)` | GET /Condition?patient={id} | Conditions |
+| `get_patient_medications(patient_id)` | GET /MedicationRequest?patient={id} | Medications |
+| `get_patient_observations(patient_id, code, _count)` | GET /Observation?patient={id} | Observations |
+| `get_patient_allergies(patient_id)` | GET /AllergyIntolerance?patient={id} | Allergies |
+| `get_patient_encounters(patient_id, _count)` | GET /Encounter?patient={id} | Encounters |
+| `create_observation(patient_id, code, display, value, unit, effective_date)` | POST /Observation | New observation |
+| `create_condition(patient_id, code, display, clinical_status)` | POST /Condition | New condition |
+| `create_questionnaire_response(patient_id, questions_responses)` | POST /QuestionnaireResponse | Structured triage |
+| `create_encounter(patient_id, reason, priority)` | POST /Encounter | Pre-consultation encounter |
+| `create_flag_and_task(patient_id, flag_detail, task_detail, priority)` | POST /Flag + POST /Task | Alert + follow-up |
 
-### triage_server.py (porta 8001) — 4 ferramentas
+### triage_server.py (port 8001) — 4 tools
 
-| Ferramenta | Descricao |
+| Tool | Description |
 |---|---|
-| `build_contextual_questions(patient_context)` | Gera perguntas contextuais baseadas no historico FHIR |
-| `parse_symptoms(patient_response)` | Extrai sintomas, duracao, severidade |
-| `check_red_flags(symptoms, conditions)` | Verifica sinais de alerta |
-| `build_questionnaire_response_data(patient_id, questions, answers)` | Monta QuestionnaireResponse FHIR |
+| `build_contextual_questions(patient_context)` | Generates contextual questions based on FHIR history |
+| `parse_symptoms(patient_response)` | Extracts symptoms, duration, severity |
+| `check_red_flags(symptoms, conditions)` | Checks warning signs |
+| `build_questionnaire_response_data(patient_id, questions, answers)` | Builds QuestionnaireResponse FHIR |
 
-### clinical_reasoning_server.py (porta 8002) — 4 ferramentas
+### clinical_reasoning_server.py (port 8002) — 4 tools
 
-| Ferramenta | Descricao |
+| Tool | Description |
 |---|---|
-| `assess_clinical_risk(conditions, new_symptoms, observations, medications)` | Score de risco com justificativa |
-| `suggest_priority(risk_assessment)` | Prioridade de atendimento |
-| `generate_clinical_summary(patient_data, triage_data, risk_data)` | Resumo para o medico |
-| `identify_follow_up_tasks(risk, conditions, gaps_in_care)` | Tarefas de follow-up |
+| `assess_clinical_risk(conditions, new_symptoms, observations, medications)` | Risk score with justification |
+| `suggest_priority(risk_assessment)` | Care priority |
+| `generate_clinical_summary(patient_data, triage_data, risk_data)` | Summary for the physician |
+| `identify_follow_up_tasks(risk, conditions, gaps_in_care)` | Follow-up tasks |
 
-## Tecnicas
+## Techniques
 
-- **FHIR Client**: requests com Basic Auth (_SYSTEM:SYS) contra http://localhost:32783/fhir/r4 (host) ou http://localhost:52773/fhir/r4 (container)
+- **FHIR Client**: requests with Basic Auth (_SYSTEM:SYS) against http://localhost:32783/fhir/r4 (host) or http://localhost:52773/fhir/r4 (container)
 - **LLM**: OpenAI gpt-4o-mini via langchain-openai
-- **MCP**: fastmcp com transport="streamable-http"
-- **Agente**: langchain-mcp-adapters + MultiServerMCPClient + load_mcp_tools + create_agent (com `system_prompt`)
-- **UI**: Gradio gr.ChatInterface (6.x, sem `type="messages"`)
-- **Deploy**: Docker com custom-entrypoint.sh que auto-starta MCP servers + seed data
+- **MCP**: fastmcp with transport="streamable-http"
+- **Agent**: langchain-mcp-adapters + MultiServerMCPClient + load_mcp_tools + create_agent (with `system_prompt`)
+- **UI**: Gradio gr.ChatInterface (6.x, without `type="messages"`)
+- **Deploy**: Docker with custom-entrypoint.sh that auto-starts MCP servers + seed data
 
-## Descobertas & Challenges
+## Discoveries & Challenges
 
-> Detalhes completos em [PROGRESS.md](./PROGRESS.md#descobertas-tecnicas-lessons-learned)
+> Full details in [PROGRESS.md](./PROGRESS.md#descobertas-tecnicas-lessons-learned)
 
-| # | Descoberta | Impacto | Solucao |
+| # | Discovery | Impact | Solution |
 |---|---|---|---|
-| 1 | IRIS FHIR POST retorna body vazio (HTTP 201) | `resp.json()` falha com JSONDecodeError | Extrair ID do header `Location` via regex |
-| 2 | `urn:uuid:` references nao resolvem com POSTs individuais | Bundles com referencias cross-resource falham | Criar Patient primeiro, resolver refs para `Patient/{id}`, depois criar dependentes |
-| 3 | `load_dotenv()` nao sobrescreve env vars existentes | `FHIR_BASE_URL` errado quando rodando via script | Scripts exportam a URL correta (porta 52773) antes de rodar |
-| 4 | Pip installs em container rodando sao perdidos no restart | Dependencias desaparecem | Adicionar ao Dockerfile + requirements.txt |
-| 5 | Gradio 6.x removeu `type="messages"` | ChatInterface falha com parametro obsoleto | Remover parametro, usar formato `list[dict]` com `role`/`content` |
-| 6 | `create_agent()` suporta `system_prompt` | SystemMessage manual e fragil | Usar parametro nativo do framework |
-| 7 | MCP sessions via `async with` fecham apos context manager | Agente perde acesso as ferramentas MCP | Usar `_client.get_tools()` (sessao por chamada) em vez de `load_mcp_tools(session)` |
-| 8 | IRIS FHIR `name` param nao suporta nome completo | `?name=Maria Silva` retorna 0 | `search_patients` tenta family, given e name parcial |
+| 1 | IRIS FHIR POST returns empty body (HTTP 201) | `resp.json()` fails with JSONDecodeError | Extract ID from `Location` header via regex |
+| 2 | `urn:uuid:` references don't resolve with individual POSTs | Bundles with cross-resource references fail | Create Patient first, resolve refs to `Patient/{id}`, then create dependents |
+| 3 | `load_dotenv()` does not override existing env vars | `FHIR_BASE_URL` wrong when running via script | Scripts export the correct URL (port 52773) before running |
+| 4 | Pip installs in running container are lost on restart | Dependencies disappear | Add to Dockerfile + requirements.txt |
+| 5 | Gradio 6.x removed `type="messages"` | ChatInterface fails with obsolete parameter | Remove parameter, use `list[dict]` format with `role`/`content` |
+| 6 | `create_agent()` supports `system_prompt` | Manual SystemMessage is fragile | Use framework's native parameter |
+| 7 | MCP sessions via `async with` close after context manager | Agent loses access to MCP tools | Use `_client.get_tools()` (per-call session) instead of `load_mcp_tools(session)` |
+| 8 | IRIS FHIR `name` param does not support full name | `?name=Maria Silva` returns 0 | `search_patients` tries family, given, and partial name |
 
 ## Status
 
-### Concluido
+### Completed
 
-- [x] 3 MCP servers implementados e rodando
-- [x] Core do agente (`agent.py`), CLI (`cli.py`) e Web UI (`app.py`) funcionais
-- [x] 4 pacientes de teste com bundles FHIR completos
-- [x] Seed data com load/clean/list + tag `triage-seed`
-- [x] Infraestrutura Docker completa (auto-startup MCP + seed data)
-- [x] Teste end-to-end com Maria Silva
+- [x] 3 MCP servers implemented and running
+- [x] Agent core (`agent.py`), CLI (`cli.py`) and Web UI (`app.py`) functional
+- [x] 4 test patients with complete FHIR bundles
+- [x] Seed data with load/clean/list + `triage-seed` tag
+- [x] Complete Docker infrastructure (auto-startup MCP + seed data)
+- [x] End-to-end test with Maria Silva
 
-### Pendente
+### Pending
 
-- [ ] Testar Gradio UI externamente (porta 7860 do host)
-- [ ] Testar com Joao Santos, Ana Costa, Roberto Lima
-- [ ] Ajustar prompt para criacao consistente de Flag/Task/QuestionnaireResponse
-- [ ] Adicionar busca de pacientes por nome
+- [ ] Test Gradio UI externally (host port 7860)
+- [ ] Test with Joao Santos, Ana Costa, Roberto Lima
+- [ ] Adjust prompt for consistent creation of Flag/Task/QuestionnaireResponse
+- [ ] Add patient search by name
 - [ ] Container restart test
 
-### Trabalho Futuro
+### Future Work
 
-- [ ] Interacao por voz
-- [ ] Testes automatizados
-- [ ] Preparacao para submissao ao concurso
-- [ ] Logging estruturado e health checks nos MCP servers
+- [ ] Voice interaction
+- [ ] Automated tests
+- [ ] Contest submission preparation
+- [ ] Structured logging and health checks on MCP servers
 
-## Validacao
+## Validation
 
-### Via Docker (recomendado)
+### Via Docker (recommended)
 
 ```bash
-# Build e start
+# Build and start
 docker compose build --no-cache --progress=plain
 docker compose up -d
 
-# Verificar MCP servers
+# Check MCP servers
 docker compose exec iris bash -c 'cat /tmp/fhir_server.log'
 docker compose exec iris bash -c 'cat /tmp/triage_server.log'
 docker compose exec iris bash -c 'cat /tmp/cr_server.log'
 
-# Verificar seed data
+# Check seed data
 docker compose exec iris bash -c 'cd /home/irisowner/irisdev/python/triage && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py list'
 
-# Acessar Gradio UI
+# Access Gradio UI
 # http://localhost:7860
 
-# Acessar FHIR API (verificar pacientes)
+# Access FHIR API (verify patients)
 # http://localhost:32783/fhir/r4/Patient
 ```
 
-### Manual (dentro do container)
+### Manual (inside container)
 
 ```bash
 docker compose exec iris bash
 cd /home/irisowner/irisdev/python/triage
 
-# 1. Carregar pacientes
+# 1. Load patients
 FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py load
 
 # 2. Start MCP servers + Gradio
 bash start_servers.sh
 
-# 3. Testar cada paciente e validar comportamento esperado
+# 3. Test each patient and validate expected behavior
 ```
 
-### Cenarios de Teste por Paciente
+### Test Scenarios by Patient
 
-| Paciente | Acao | Resultado Esperado |
+| Patient | Action | Expected Result |
 |---|---|---|
-| Maria Silva | Informar nome, responder perguntas sobre diabetes | Risco cardiovascular moderado/alto, Flag + Task criados |
-| Joao Santos | Informar nome, relatar sangramento | Red flag por warfarina, risco alto, prioridade urgent |
-| Ana Costa | Informar nome, relatar sintoma leve | Risco baixo, prioridade routine, perguntas genericas |
-| Roberto Lima | Informar nome, relatar falta de ar | Red flag respiratoria (DPOC + SpO2 93%), prioridade urgent/emergency |
+| Maria Silva | Provide name, answer questions about diabetes | Moderate/high cardiovascular risk, Flag + Task created |
+| Joao Santos | Provide name, report bleeding | Red flag due to warfarin, high risk, urgent priority |
+| Ana Costa | Provide name, report mild symptoms | Low risk, routine priority, generic questions |
+| Roberto Lima | Provide name, report shortness of breath | Respiratory red flag (COPD + SpO2 93%), urgent/emergency priority |

@@ -4,25 +4,25 @@ from fastmcp import FastMCP
 mcp = FastMCP("TriageServer")
 
 RED_FLAGS = {
-    "dispneia": ["insuficiencia cardiaca", "dpoc", "asma", "fibrilacao atrial"],
-    "dor toracica": ["insuficiencia cardiaca", "hipertensao", "fibrilacao atrial"],
-    "sede excessiva": ["diabetes", "diabetes tipo 2"],
-    "visao embaçada": ["diabetes", "diabetes tipo 2", "hipertensao"],
-    "inchaco pernas": ["insuficiencia cardiaca", "hipertensao"],
-    "tontura": ["hipertensao", "fibrilacao atrial"],
-    "sangramento": ["warfarina", "anticoagulante"],
-    "piora da tosse": ["dpoc", "insuficiencia cardiaca"],
-    "ideias suicidas": ["depressao"],
-    "fadiga intensa": ["diabetes", "insuficiencia cardiaca", "depressao"],
+    "shortness of breath": ["heart failure", "copd", "asthma", "atrial fibrillation"],
+    "chest pain": ["heart failure", "hypertension", "atrial fibrillation"],
+    "excessive thirst": ["diabetes", "diabetes type 2"],
+    "blurred vision": ["diabetes", "diabetes type 2", "hypertension"],
+    "leg swelling": ["heart failure", "hypertension"],
+    "dizziness": ["hypertension", "atrial fibrillation"],
+    "bleeding": ["warfarin", "anticoagulant"],
+    "worsening cough": ["copd", "heart failure"],
+    "suicidal ideation": ["depression"],
+    "severe fatigue": ["diabetes", "heart failure", "depression"],
 }
 
 SYMPTOM_CATEGORIES = {
-    "geral": ["fadiga", "cansaco", "febre", "perda de peso", "sede excessiva"],
-    "cardiovascular": ["dispneia", "dor toracica", "palpitacao", "inchaco pernas", "tontura"],
-    "respiratorio": ["tosse", "falta de ar", "piora da tosse", "sibilo"],
-    "neurologico": ["cefaleia", "tontura", "visao embaçada", "confusao"],
-    "metabolico": ["sede excessiva", "polidipsia", "poliuria", "visao embaçada"],
-    "mental": ["tristeza", "insônia", "ideias suicidas", "ansiedade", "irritabilidade"],
+    "general": ["fatigue", "tiredness", "fever", "weight loss", "excessive thirst"],
+    "cardiovascular": ["shortness of breath", "chest pain", "palpitation", "leg swelling", "dizziness"],
+    "respiratory": ["cough", "difficulty breathing", "worsening cough", "wheezing"],
+    "neurological": ["headache", "dizziness", "blurred vision", "confusion"],
+    "metabolic": ["excessive thirst", "polydipsia", "polyuria", "blurred vision"],
+    "mental": ["sadness", "insomnia", "suicidal ideation", "anxiety", "irritability"],
 }
 
 
@@ -34,46 +34,46 @@ def _build_question_plan(patient_context: dict) -> list[dict]:
 
     plan = []
 
-    plan.append({"topic": "motivo_consulta", "question": "Como voce esta se sentindo hoje?"})
+    plan.append({"topic": "reason_for_visit", "question": "How are you feeling today?"})
 
     for cond in conditions:
         if "diabetes" in cond:
-            plan.append({"topic": "diabetes_controle", "question": "Notei que voce tem diabetes. Seu acucar anda controlado ultimamente?"})
-            plan.append({"topic": "diabetes_sintomas", "question": "Teve aumento de sede, fome ou urina nos ultimos dias?"})
-            plan.append({"topic": "diabetes_visao", "question": "Notou alguma mudanca na visao?"})
-        if "hipertens" in cond:
-            plan.append({"topic": "hipertensao_controle", "question": "Sua pressao tem sido controlada ultimamente?"})
-            plan.append({"topic": "hipertensao_sintomas", "question": "Sentiu tontura ou dor de cabeca recentemente?"})
-            plan.append({"topic": "hipertensao_inchaco", "question": "Notou inchaco nas pernas?"})
-        if "insuficiencia" in cond and "cardiaca" in cond:
-            plan.append({"topic": "ic_falta_ar", "question": "Teve falta de ar ao deitar ou ao subir escadas?"})
-            plan.append({"topic": "ic_inchaco", "question": "Notou inchaco nas pernas ou abdome?"})
-        if "fibrilacao" in cond:
-            plan.append({"topic": "fa_palpitacao", "question": "Sentiu palpitar ou coracao acelerado recentemente?"})
-        if "dpoc" in cond or "obstructive" in cond:
-            plan.append({"topic": "dpoc_falta_ar", "question": "Sua falta de ar piorou nos ultimos dias?"})
-            plan.append({"topic": "dpoc_tosse", "question": "Teve tosse com mais secrecao ou diferente do habitual?"})
+            plan.append({"topic": "diabetes_control", "question": "I noticed you have diabetes. Has your blood sugar been controlled lately?"})
+            plan.append({"topic": "diabetes_symptoms", "question": "Have you had increased thirst, hunger, or urination in recent days?"})
+            plan.append({"topic": "diabetes_vision", "question": "Have you noticed any changes in your vision?"})
+        if "hypertens" in cond:
+            plan.append({"topic": "hypertension_control", "question": "Has your blood pressure been controlled lately?"})
+            plan.append({"topic": "hypertension_symptoms", "question": "Have you felt dizzy or had headaches recently?"})
+            plan.append({"topic": "hypertension_swelling", "question": "Have you noticed swelling in your legs?"})
+        if "heart failure" in cond or ("insufficiency" in cond and "cardiac" in cond):
+            plan.append({"topic": "hf_shortness_of_breath", "question": "Have you had shortness of breath when lying down or climbing stairs?"})
+            plan.append({"topic": "hf_swelling", "question": "Have you noticed swelling in your legs or abdomen?"})
+        if "atrial fibrillation" in cond or "fibrillation" in cond:
+            plan.append({"topic": "af_palpitation", "question": "Have you felt your heart racing or fluttering recently?"})
+        if "copd" in cond or "obstructive" in cond:
+            plan.append({"topic": "copd_shortness_of_breath", "question": "Has your shortness of breath worsened in recent days?"})
+            plan.append({"topic": "copd_cough", "question": "Have you had increased coughing or different sputum than usual?"})
         if "depress" in cond:
-            plan.append({"topic": "depressao_emocional", "question": "Como esta se sentindo emocionalmente?"})
-            plan.append({"topic": "depressao_risco", "question": "Teve pensamentos de se machucar ou desistir?"})
-        if "artrose" in cond or "osteoartrite" in cond:
-            plan.append({"topic": "artrose_dor", "question": "Como esta a dor no joelho?"})
-            plan.append({"topic": "artrose_impacto", "question": "A dor afeta suas atividades diarias?"})
+            plan.append({"topic": "depression_emotional", "question": "How are you feeling emotionally?"})
+            plan.append({"topic": "depression_risk", "question": "Have you had thoughts of hurting yourself or giving up?"})
+        if "osteoarthritis" in cond or "arthrosis" in cond:
+            plan.append({"topic": "osteoarthritis_pain", "question": "How is your knee pain?"})
+            plan.append({"topic": "osteoarthritis_impact", "question": "Does the pain affect your daily activities?"})
 
     for med in medications:
-        if "warfarina" in med or "varfarina" in med:
-            plan.append({"topic": "warfarina_sangramento", "question": "Notou algum sangramento incomum ou hematomas?"})
-        if "metformina" in med:
-            plan.append({"topic": "metformina_gi", "question": "Teve enjoos, dor abdominal ou diarreia?"})
+        if "warfarin" in med:
+            plan.append({"topic": "warfarin_bleeding", "question": "Have you noticed any unusual bleeding or bruising?"})
+        if "metformin" in med:
+            plan.append({"topic": "metformin_gi", "question": "Have you had nausea, abdominal pain, or diarrhea?"})
 
     for allergy in allergies:
         substance = allergy.get("substance", "").lower()
         severity = allergy.get("criticality", "")
-        if "anafilaxia" in str(allergy.get("reactions", [])) or severity == "high":
-            plan.append({"topic": f"alergia_{substance.replace(' ', '_')}", "question": f"Lembre-se: voce tem alergia grave a {substance}. Evite esse medicamento."})
+        if "anaphylaxis" in str(allergy.get("reactions", [])) or severity == "high":
+            plan.append({"topic": f"allergy_{substance.replace(' ', '_')}", "question": f"Reminder: you have a severe allergy to {substance}. Avoid this medication."})
 
     if last_encounter:
-        plan.append({"topic": "mudanca_desde_ultima", "question": f"Sua ultima consulta foi em {last_encounter}. Houve alguma mudanca desde entao?"})
+        plan.append({"topic": "changes_since_last", "question": f"Your last visit was on {last_encounter}. Has anything changed since then?"})
 
     seen = set()
     unique_plan = []
@@ -87,11 +87,11 @@ def _build_question_plan(patient_context: dict) -> list[dict]:
 
 @mcp.tool()
 async def get_next_triage_question(patient_context: str, covered_topics: list[str] = None) -> str:
-    """Retorna a PROXIMA pergunta de triagem (uma por vez) baseada no historico FHIR e nos topicos ja cobertos. patient_context = JSON com dados do paciente. covered_topics = lista de topicos ja respondidos (ex: ["diabetes_controle","hipertensao_controle"])."""
+    """Returns the NEXT triage question (one at a time) based on FHIR history and already covered topics. patient_context = JSON with patient data. covered_topics = list of already answered topics (e.g. ["diabetes_control","hypertension_control"])."""
     try:
         ctx = json.loads(patient_context)
     except json.JSONDecodeError:
-        return json.dumps({"error": "patient_context deve ser JSON valido"}, ensure_ascii=False)
+        return json.dumps({"error": "patient_context must be valid JSON"}, ensure_ascii=False)
 
     covered = covered_topics if covered_topics else []
 
@@ -121,11 +121,11 @@ async def get_next_triage_question(patient_context: str, covered_topics: list[st
 
 @mcp.tool()
 async def get_all_triage_topics(patient_context: str) -> str:
-    """Retorna todos os topicos de triagem disponiveis para o paciente. patient_context = JSON com dados do paciente. Use para ver todos os topicos antes de comecar a triagem."""
+    """Returns all available triage topics for the patient. patient_context = JSON with patient data. Use to see all topics before starting triage."""
     try:
         ctx = json.loads(patient_context)
     except json.JSONDecodeError:
-        return json.dumps({"error": "patient_context deve ser JSON valido"}, ensure_ascii=False)
+        return json.dumps({"error": "patient_context must be valid JSON"}, ensure_ascii=False)
 
     full_plan = _build_question_plan(ctx)
     return json.dumps(
@@ -139,7 +139,7 @@ async def get_all_triage_topics(patient_context: str) -> str:
 
 @mcp.tool()
 async def parse_symptoms(patient_response: str) -> str:
-    """Extrai e estrutura sintomas, duracao e severidade da resposta do paciente. patient_response = texto livre da resposta do paciente."""
+    """Extracts and structures symptoms, duration, and severity from the patient's response. patient_response = free text of the patient's response."""
     response_lower = patient_response.lower()
 
     found_symptoms = []
@@ -149,7 +149,7 @@ async def parse_symptoms(patient_response: str) -> str:
                 found_symptoms.append({"symptom": symptom, "category": category})
 
     duration = ""
-    for marker in ["ha ", "faz ", "ultimos ", "ultima ", "desde "]:
+    for marker in ["for ", "last ", "past ", "since "]:
         if marker in response_lower:
             idx = response_lower.index(marker)
             snippet = response_lower[idx : idx + 30]
@@ -157,9 +157,9 @@ async def parse_symptoms(patient_response: str) -> str:
             break
 
     severity = "moderate"
-    if any(w in response_lower for w in ["muito", "intensa", "forte", "grave", "insuportavel", "piorando"]):
+    if any(w in response_lower for w in ["very", "severe", "strong", "serious", "unbearable", "worsening"]):
         severity = "severe"
-    elif any(w in response_lower for w in ["leve", "pouco", "discreto", "minimo"]):
+    elif any(w in response_lower for w in ["mild", "slight", "little", "minimal"]):
         severity = "mild"
 
     return json.dumps(
@@ -175,7 +175,7 @@ async def parse_symptoms(patient_response: str) -> str:
 
 @mcp.tool()
 async def check_red_flags(symptoms: list, conditions: list) -> str:
-    """Verifica sinais de alerta (red flags) cruzando sintomas atuais com condicoes existentes. symptoms = JSON lista de sintomas, conditions = JSON lista de condicoes ativas."""
+    """Checks warning signs (red flags) by cross-referencing current symptoms with existing conditions. symptoms = JSON list of symptoms, conditions = JSON list of active conditions."""
     try:
         if symptoms is None:
             symptom_list = []
@@ -213,7 +213,7 @@ async def check_red_flags(symptoms: list, conditions: list) -> str:
                             }
                         )
 
-    has_critical = any(s.get("symptom", "").lower() in ["dor toracica", "ideias suicidas", "sangramento", "dispneia"] for s in (symptom_list if isinstance(symptom_list, list) else []))
+    has_critical = any(s.get("symptom", "").lower() in ["chest pain", "suicidal ideation", "bleeding", "shortness of breath"] for s in (symptom_list if isinstance(symptom_list, list) else []))
 
     return json.dumps(
         {
@@ -227,7 +227,7 @@ async def check_red_flags(symptoms: list, conditions: list) -> str:
 
 @mcp.tool()
 async def build_questionnaire_response_data(patient_id: str, questions: list, answers: list) -> str:
-    """Monta estrutura de dados para QuestionnaireResponse FHIR pronto para ser salvo. questions = JSON lista de perguntas, answers = JSON lista de respostas (mesma ordem)."""
+    """Builds data structure for FHIR QuestionnaireResponse ready to be saved. questions = JSON list of questions, answers = JSON list of answers (same order)."""
     try:
         if questions is None:
             q_list = []

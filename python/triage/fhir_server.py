@@ -64,7 +64,7 @@ def _format_bundle(bundle: dict) -> str:
 
 @mcp.tool()
 async def search_patients(name: str) -> str:
-    """Busca pacientes pelo nome (parcial, case-insensitive). Use esta ferramenta QUANDO VOCE NAO TEM O ID do paciente, apenas o nome. Retorna lista de pacientes com ID, nome e data de nascimento."""
+    """Search for patients by name (partial, case-insensitive). Use this tool WHEN YOU DO NOT HAVE the patient ID, only the name. Returns list of patients with ID, name, and date of birth."""
     parts = name.strip().split()
     queries = []
     if len(parts) >= 2:
@@ -103,7 +103,7 @@ async def search_patients(name: str) -> str:
 
 @mcp.tool()
 async def get_patient(patient_id: str) -> str:
-    """Busca dados demograficos de um paciente pelo ID. Retorna nome, genero, data de nascimento e identificadores."""
+    """Retrieves demographic data for a patient by ID. Returns name, gender, date of birth, and identifiers."""
     data = _fhir_get(f"/Patient/{patient_id}")
     names = data.get("name", [])
     name = ""
@@ -122,7 +122,7 @@ async def get_patient(patient_id: str) -> str:
 
 @mcp.tool()
 async def get_patient_conditions(patient_id: str) -> str:
-    """Busca todas as condicoes/doencas de um paciente. Retorna condicoes ativas e resolvidas com codigos ICD-10."""
+    """Retrieves all conditions/diseases for a patient. Returns active and resolved conditions with ICD-10 codes."""
     bundle = _fhir_get("/Condition", {"patient": patient_id, "_count": 100})
     conditions = []
     for e in bundle.get("entry", []):
@@ -158,7 +158,7 @@ async def get_patient_conditions(patient_id: str) -> str:
 
 @mcp.tool()
 async def get_patient_medications(patient_id: str) -> str:
-    """Busca todas as medicacoes de um paciente. Inclui medicacoes ativas e descontinuadas."""
+    """Retrieves all medications for a patient. Includes active and discontinued medications."""
     bundle = _fhir_get("/MedicationRequest", {"patient": patient_id, "_count": 100})
     medications = []
     for e in bundle.get("entry", []):
@@ -180,7 +180,7 @@ async def get_patient_medications(patient_id: str) -> str:
 
 @mcp.tool()
 async def get_patient_observations(patient_id: str, code: str = "", count: int = 20) -> str:
-    """Busca observacoes laboratoriais e sinais vitais de um paciente. Filtro opcional por codigo LOINC (ex: 4548-4 para HbA1c)."""
+    """Retrieves laboratory observations and vital signs for a patient. Optional filter by LOINC code (e.g. 4548-4 for HbA1c)."""
     params = {"patient": patient_id, "_count": str(count), "_sort": "-date"}
     if code:
         params["code"] = code
@@ -230,7 +230,7 @@ async def get_patient_observations(patient_id: str, code: str = "", count: int =
 
 @mcp.tool()
 async def get_patient_allergies(patient_id: str) -> str:
-    """Busca alergias e intolerancias de um paciente. Inclui tipo, criticalidade e reacoes."""
+    """Retrieves allergies and intolerances for a patient. Includes type, criticality, and reactions."""
     bundle = _fhir_get("/AllergyIntolerance", {"patient": patient_id, "_count": 100})
     allergies = []
     for e in bundle.get("entry", []):
@@ -259,7 +259,7 @@ async def get_patient_allergies(patient_id: str) -> str:
 
 @mcp.tool()
 async def get_patient_encounters(patient_id: str, count: int = 10) -> str:
-    """Busca encontros/consultas anteriores do paciente. Inclui tipo, data e status."""
+    """Retrieves previous encounters/visits for the patient. Includes type, date, and status."""
     bundle = _fhir_get("/Encounter", {"patient": patient_id, "_count": str(count), "_sort": "-date"})
     encounters = []
     for e in bundle.get("entry", []):
@@ -283,15 +283,9 @@ async def get_patient_encounters(patient_id: str, count: int = 10) -> str:
 
 @mcp.tool()
 async def create_observation(
-    patient_id: str,
-    code: str,
-    display: str,
-    value: float,
-    unit: str,
-    effective_date: str = "",
-    category: str = "laboratory",
+    patient_id: str, code: str, display: str, value: float, unit: str, effective_date: str = "", category: str = "laboratory",
 ) -> str:
-    """Cria uma nova observacao clinica para o paciente no FHIR Server. code = codigo LOINC, display = nome do exame, value = valor numerico, unit = unidade."""
+    """Creates a new clinical observation for the patient on the FHIR Server. code = LOINC code, display = test name, value = numeric value, unit = unit of measure."""
     if not effective_date:
         effective_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "+00:00")
     resource = {
@@ -321,12 +315,9 @@ async def create_observation(
 
 @mcp.tool()
 async def create_condition(
-    patient_id: str,
-    code: str,
-    display: str,
-    clinical_status: str = "active",
+    patient_id: str, code: str, display: str, clinical_status: str = "active",
 ) -> str:
-    """Cria uma nova condicao/doenca para o paciente no FHIR Server. code = codigo ICD-10, display = nome da condicao, clinical_status = active|resolved|recurrence."""
+    """Creates a new condition/disease for the patient on the FHIR Server. code = ICD-10 code, display = condition name, clinical_status = active|resolved|recurrence."""
     resource = {
         "resourceType": "Condition",
         "clinicalStatus": {
@@ -358,14 +349,13 @@ async def create_condition(
 
 @mcp.tool()
 async def create_questionnaire_response(
-    patient_id: str,
-    questions_responses: str,
+    patient_id: str, questions_responses: str,
 ) -> str:
-    """Salva a triagem estruturada como QuestionnaireResponse no FHIR Server. questions_responses = JSON string com lista de {question, answer}."""
+    """Saves the structured triage as QuestionnaireResponse on the FHIR Server. questions_responses = JSON string with list of {question, answer}."""
     try:
         qr_list = json.loads(questions_responses)
     except json.JSONDecodeError:
-        return json.dumps({"error": "questions_responses deve ser JSON valido com lista de {question, answer}"})
+        return json.dumps({"error": "questions_responses must be valid JSON with list of {question, answer}"})
 
     items = []
     for i, qr in enumerate(qr_list):
@@ -390,11 +380,9 @@ async def create_questionnaire_response(
 
 @mcp.tool()
 async def create_encounter(
-    patient_id: str,
-    reason: str,
-    priority: str = "routine",
+    patient_id: str, reason: str, priority: str = "routine",
 ) -> str:
-    """Cria um encontro pre-consulta no FHIR Server. reason = motivo da consulta, priority = routine|urgent|emergency."""
+    """Creates a pre-consultation encounter on the FHIR Server. reason = reason for visit, priority = routine|urgent|emergency."""
     priority_map = {
         "routine": "R",
         "urgent": "UR",
@@ -425,12 +413,9 @@ async def create_encounter(
 
 @mcp.tool()
 async def create_flag_and_task(
-    patient_id: str,
-    flag_detail: str,
-    task_detail: str,
-    priority: str = "high",
+    patient_id: str, flag_detail: str, task_detail: str, priority: str = "high",
 ) -> str:
-    """Cria um alerta clinico (Flag) e uma tarefa de follow-up (Task) para o paciente no FHIR Server. flag_detail = descricao do alerta, task_detail = descricao da tarefa, priority = low|routine|urgent|high."""
+    """Creates a clinical alert (Flag) and a follow-up task (Task) for the patient on the FHIR Server. flag_detail = alert description, task_detail = task description, priority = low|routine|urgent|high."""
     flag_resource = {
         "resourceType": "Flag",
         "status": "active",

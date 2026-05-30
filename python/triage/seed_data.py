@@ -76,10 +76,10 @@ def _create_resource(resource_type, resource):
 def load_all():
     bundles = sorted(SEED_DIR.glob("patient_*.json"))
     if not bundles:
-        print(f"Nenhum bundle encontrado em {SEED_DIR}")
+        print(f"No bundles found in {SEED_DIR}")
         return
 
-    print(f"Carregando {len(bundles)} bundle(s) em {FHIR_BASE} ...")
+    print(f"Loading {len(bundles)} bundle(s) into {FHIR_BASE} ...")
     total_created = 0
 
     for bundle_path in bundles:
@@ -112,27 +112,27 @@ def load_all():
             rid, err = _create_resource("Patient", resource)
             if rid:
                 name = _extract_name(resource)
-                print(f" Patient/{rid} {name} OK")
-                uuid_map[full_url] = rid
-                total_created += 1
-            else:
-                print(f" Patient ERRO {err}")
+            print(f" Patient/{rid} {name} OK")
+            uuid_map[full_url] = rid
+            total_created += 1
+        else:
+            print(f" Patient ERROR {err}")
 
-        for full_url, resource in other_entries:
-            resolved = _resolve_references(resource, uuid_map)
-            resource_type = resolved.get("resourceType", "?")
-            rid, err = _create_resource(resource_type, resolved)
-            if rid:
-                print(f" {resource_type}/{rid} OK")
-                total_created += 1
-            else:
-                print(f" {resource_type} ERRO {err}")
+    for full_url, resource in other_entries:
+        resolved = _resolve_references(resource, uuid_map)
+        resource_type = resolved.get("resourceType", "?")
+        rid, err = _create_resource(resource_type, resolved)
+        if rid:
+            print(f" {resource_type}/{rid} OK")
+            total_created += 1
+        else:
+            print(f" {resource_type} ERROR {err}")
 
-    print(f"\nTotal de recursos criados: {total_created}")
+    print(f"\nTotal resources created: {total_created}")
 
 
 def clean():
-    print(f"Removendo recursos de teste marcados com tag '{PATIENT_TAG}' ...")
+    print(f"Removing test resources tagged with '{PATIENT_TAG}' ...")
     removed = 0
 
     for resource_type in ["Patient", "Condition", "Observation",
@@ -187,7 +187,7 @@ def clean():
         except Exception:
             pass
 
-    print(f"Recursos removidos: {removed}")
+    print(f"Resources removed: {removed}")
 
 
 def _extract_name(resource):
@@ -203,16 +203,16 @@ def list_seed_patients():
     params = {"_tag": PATIENT_TAG, "_count": 50}
     resp = requests.get(url, params=params, headers=_headers(), auth=_auth(), timeout=30)
     if resp.status_code != 200:
-        print(f"Erro {resp.status_code}: {resp.text[:200]}")
+        print(f"Error {resp.status_code}: {resp.text[:200]}")
         return
 
     bundle = resp.json()
     entries = bundle.get("entry", [])
     if not entries:
-        print("Nenhum paciente de teste encontrado.")
+        print("No test patients found.")
         return
 
-    print(f"Pacientes de teste ({len(entries)}):")
+    print(f"Test patients ({len(entries)}):")
     for entry in entries:
         p = entry["resource"]
         name = _extract_name(p)
@@ -231,4 +231,4 @@ if __name__ == "__main__":
     elif cmd == "list":
         list_seed_patients()
     else:
-        print(f"Uso: python seed_data.py [load|clean|list]")
+        print(f"Usage: python seed_data.py [load|clean|list]")
