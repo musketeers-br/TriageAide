@@ -44,23 +44,24 @@ async def chat_fn(message, history):
 
         ai_response = extract_ai_response(result.get("messages", []))
         suffix = f"\n\n---\n⏱ {elapsed:.1f}s"
-        return (ai_response or "[Sem resposta textual do agente]") + suffix
+        return (ai_response or "[No textual response from agent]") + suffix
 
-    except Exception as e:
+    except BaseException as e:
         elapsed = time.time() - t0
-        return f"Erro ({elapsed:.1f}s): {str(e)}"
+        err = e.exceptions[0] if isinstance(e, BaseExceptionGroup) else e
+        return f"Error ({elapsed:.1f}s): {type(err).__name__}: {str(err)}"
 
 
 def main():
     demo = gr.ChatInterface(
         fn=chat_fn,
-        title="TriageAide — Triagem Pre-Consulta FHIR-First",
-        description="Agente de IA que consulta o prontuario FHIR do paciente, realiza triagem contextual inteligente e atualiza o registro clinico. Informe o ID do paciente para iniciar.",
+        title="TriageAide — FHIR-First Pre-Consultation Triage",
+        description="AI agent that queries the patient's FHIR medical record, conducts intelligent contextual triage, and updates the clinical record. Enter the patient ID to start.",
         examples=[
-            "Iniciar triagem para a paciente Maria Silva",
-            "Triagem do paciente Joao Santos",
-            "Historico da paciente Ana Costa",
-            "Triagem do paciente Roberto Lima",
+            "Start triage for patient Maria Silva",
+            "Triage for patient Joao Santos",
+            "Patient Ana Costa history",
+            "Triage for patient Roberto Lima",
         ],
     )
     demo.launch(server_name="0.0.0.0", server_port=7860)

@@ -11,18 +11,18 @@ async def run_interactive():
     messages = []
 
     print("\n" + "=" * 60)
-    print("Agente de Triagem Pre-Consulta — FHIR-First Agentic AI")
+    print("Pre-Consultation Triage Agent — FHIR-First Agentic AI")
     print("=" * 60)
-    print("Digite o ID do paciente para iniciar a triagem.")
-    print("Exemplos de pacientes de teste: use 'list' para ver os disponiveis")
-    print("Digite 'sair' para encerrar.\n")
+    print("Enter the patient ID to start triage.")
+    print("Test patient examples: use 'list' to see available ones")
+    print("Type 'exit' to quit.\n")
 
     while True:
-        user_input = input("Voce: ").strip()
+        user_input = input("You: ").strip()
         if not user_input:
             continue
-        if user_input.lower() == "sair":
-            print("Encerrando...")
+        if user_input.lower() == "exit":
+            print("Shutting down...")
             break
 
         messages.append(HumanMessage(content=user_input))
@@ -33,16 +33,16 @@ async def run_interactive():
 
             ai_response = extract_ai_response(response_messages)
 
-            if ai_response:
-                print(f"\nAgente: {ai_response}\n")
-                messages.append(AIMessage(content=ai_response))
-            else:
-                print("\nAgente: [processou sem resposta textual]\n")
+        if ai_response:
+            print(f"\nAgent: {ai_response}\n")
+            messages.append(AIMessage(content=ai_response))
+        else:
+            print("\nAgent: [processed without textual response]\n")
 
             messages = response_messages
 
         except Exception as e:
-            print(f"\nErro: {e}\n")
+            print(f"\nError: {e}\n")
             messages.pop()
 
 

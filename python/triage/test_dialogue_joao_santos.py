@@ -6,7 +6,7 @@ CKD stage 3, aspirin allergy) and checks:
 1. Agent asks only ONE question per turn
 2. Agent doesn't repeat questions
 3. Agent uses FHIR data contextually
-4. Conversation flows naturally in Portuguese
+4. Conversation flows naturally in English
 """
 import os
 import sys
@@ -23,16 +23,16 @@ from agent import create_triage_agent, extract_ai_response
 
 
 PATIENT_RESPONSES = [
-    "Quero iniciar a triagem para o paciente Joao Santos",
-    "Nao estou me sentindo bem, estou com falta de ar e cansaco",
-    "Sim, tenho notado inchaco nas pernas e pes, principalmente a noite",
-    "Nao, nao senti nenhuma dor no peito",
-    "Sim, tenho notado que esta urinando menos que o normal",
-    "Nao, meu peso esta estavel, nao aumentei",
-    "Nao, nao tomei nenhuma dose de aspirina, sei que sou alergico",
-    "Sim, tenho seguido a dieta e tomando os medicamentos certinho",
-    "Nao, nao fiz exames recentemente, o ultimo foi em janeiro",
-    "Sim, as vezes sinto tontura quando levanto rapido",
+    "I want to start triage for patient Joao Santos",
+    "I'm not feeling well, I have shortness of breath and fatigue",
+    "Yes, I've noticed swelling in my legs and feet, especially at night",
+    "No, I haven't had any chest pain",
+    "Yes, I've noticed I'm urinating less than usual",
+    "No, my weight is stable, I haven't gained any",
+    "No, I haven't taken any aspirin, I know I'm allergic",
+    "Yes, I've been following the diet and taking my medications correctly",
+    "No, I haven't had any tests recently, the last one was in January",
+    "Yes, sometimes I feel dizzy when I stand up quickly",
 ]
 
 
@@ -55,12 +55,12 @@ async def run_test():
     turn_outputs = []
 
     print("\n" + "=" * 70)
-    print("TESTE DE QUALIDADE DO DIALOGO — JOAO SANTOS")
+    print("DIALOGUE QUALITY TEST — JOAO SANTOS")
     print("=" * 70)
 
     for turn_idx, user_msg in enumerate(PATIENT_RESPONSES):
-        print(f"\n--- TURNO {turn_idx + 1} ---")
-        print(f"PACIENTE: {user_msg}")
+        print(f"\n--- TURN {turn_idx + 1} ---")
+        print(f"PATIENT: {user_msg}")
 
         messages = list(session_messages)
         messages.append(HumanMessage(content=user_msg))
@@ -69,27 +69,27 @@ async def run_test():
             result = await agent.ainvoke({"messages": messages})
             session_messages = result.get("messages", [])
 
-            ai_response = extract_ai_response(session_messages) or "[Sem resposta textual — agente chamou ferramentas]"
+            ai_response = extract_ai_response(session_messages) or "[No textual response — agent called tools]"
 
-            print(f"AGENTE: {ai_response[:400]}")
+            print(f"AGENT: {ai_response[:400]}")
 
             q_count = count_questions(ai_response)
             questions = extract_questions(ai_response)
 
-            print(f" → Perguntas neste turno: {q_count}")
+            print(f" → Questions this turn: {q_count}")
             if questions:
                 for q in questions:
                     q_clean = q.strip()
                     print(f" ❓ {q_clean[:120]}")
                     if q_clean in all_agent_questions:
-                        violations.append(
-                            f"TURN {turn_idx + 1}: PERGUNTA REPETIDA: {q_clean[:100]}"
-                        )
+                violations.append(
+                    f"TURN {turn_idx + 1}: REPEATED QUESTION: {q_clean[:100]}"
+                )
                     all_agent_questions.append(q_clean)
 
             if q_count > 1 and turn_idx >= 1:
                 violations.append(
-                    f"TURN {turn_idx + 1}: {q_count} perguntas em uma mensagem (esperava max 1)"
+                    f"TURN {turn_idx + 1}: {q_count} questions in one message (expected max 1)"
                 )
 
             turn_outputs.append(
@@ -103,67 +103,67 @@ async def run_test():
 
         except Exception as e:
             err_str = str(e)
-            print(f"ERRO: {err_str[:200]}")
+            print(f"ERROR: {err_str[:200]}")
             if "tool_call_ids did not have response messages" in err_str:
                 violations.append(
-                    f"TURN {turn_idx + 1}: API error — tool_calls sem tool responses (problema de estado)"
+                    f"TURN {turn_idx + 1}: API error — tool_calls without tool responses (state issue)"
                 )
             session_messages = []
             continue
 
     print("\n" + "=" * 70)
-    print("RESULTADO DO TESTE")
+    print("TEST RESULT")
     print("=" * 70)
-    print(f"Total de turnos: {len(PATIENT_RESPONSES)}")
-    print(f"Total de perguntas feitas pelo agente: {len(all_agent_questions)}")
-    print(f"Violacoes encontradas: {len(violations)}")
+    print(f"Total turns: {len(PATIENT_RESPONSES)}")
+    print(f"Total questions asked by agent: {len(all_agent_questions)}")
+    print(f"Violations found: {len(violations)}")
 
     if violations:
-        print("\nVIOLACOES:")
+        print("\nVIOLATIONS:")
         for v in violations:
             print(f" ⚠️ {v}")
     else:
-        print("\n✅ Nenhuma violacao encontrada!")
+        print("\n✅ No violations found!")
 
     unique_questions = len(set(all_agent_questions))
-    print(f"\nPerguntas unicas: {unique_questions}/{len(all_agent_questions)}")
+    print(f"\nUnique questions: {unique_questions}/{len(all_agent_questions)}")
     if unique_questions < len(all_agent_questions):
-        print(" ⚠️ Perguntas duplicadas detectadas!")
+        print(" ⚠️ Duplicate questions detected!")
 
     has_fhir_context = any(
         any(
             kw in t["agent"].lower()
             for kw in [
-                "insuficiencia",
-                "fibrilacao",
+                "heart failure",
+                "fibrillation",
                 "diabetes",
-                "hipertens",
+                "hypertens",
                 "renal",
-                "warfarina",
+                "warfarin",
                 "enalapril",
-                "furosemida",
-                "metformina",
-                "creatinina",
+                "furosemide",
+                "metformin",
+                "creatinine",
                 "bnr",
                 "inr",
-                "prontuario",
+                "medical record",
                 "fhir",
-                "medicacao",
-                "aspirina",
-                "alergi",
+                "medication",
+                "aspirin",
+                "allergi",
             ]
         )
         for t in turn_outputs
         if t["turn"] > 1
     )
-    print(
-        f"\nAgente usou contexto FHIR nas respostas: {'✅ Sim' if has_fhir_context else '❌ Nao'}"
-    )
+        print(
+            f"\nAgent used FHIR context in responses: {'✅ Yes' if has_fhir_context else '❌ No'}"
+        )
 
     one_q_per_turn = sum(1 for t in turn_outputs if t["question_count"] <= 1)
     multi_q_turns = sum(1 for t in turn_outputs if t["question_count"] > 1)
-    print(f"Turnos com 1 pergunta ou menos: {one_q_per_turn}/{len(turn_outputs)}")
-    print(f"Turnos com multiplas perguntas: {multi_q_turns}/{len(turn_outputs)}")
+    print(f"Turns with 1 question or fewer: {one_q_per_turn}/{len(turn_outputs)}")
+    print(f"Turns with multiple questions: {multi_q_turns}/{len(turn_outputs)}")
 
     results_dir = os.path.join(os.path.dirname(__file__), "..", "..", "test_results")
     os.makedirs(results_dir, exist_ok=True)
