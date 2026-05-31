@@ -7,19 +7,25 @@ Build a Python application that implements the scenario described in `doc/scenar
 ## Architecture
 
 ```
-FHIR Server (IRIS for Health :32783)
+FHIR Server (IRIS for Health :32783)         ← iris container
 |
 fhir_server.py (MCP :8000) — 12 FHIR CRUD tools
 |
-triage_server.py (MCP :8001) — 4 contextual triage tools
+triage_server.py (MCP :8001) — 5 contextual triage tools
 |
 clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
 |
 agent.py (LangChain + OpenAI gpt-4o-mini) — agent core (factory, system prompt)
 |
 cli.py — interactive CLI interface (imports from agent.py)
-app.py (Gradio) — web chat UI for demo (:7860)
+app.py (Gradio) — web chat UI with trace panel (:7860)
+|
+entrypoint.sh — container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
 ```
+
+Two independent Docker services on a shared `fhir-net` bridge network:
+- **iris** — IRIS for Health FHIR server
+- **triage** — Python app (MCP servers + agent + Gradio UI)
 
 ## Agent Flow (5 steps from scenario1.md)
 
@@ -54,42 +60,27 @@ app.py (Gradio) — web chat UI for demo (:7860)
 
 ```
 python/triage/
-.env             # FHIR_BASE_URL, OPENAI_API_KEY — NOT tracked in git
-.env.example     # Template without credentials
-requirements.txt # Python dependencies
-seed_data.py     # Script to load/clean/list test patients
-seed_data/       # FHIR JSON bundles for loading
-  patient_maria_silva.json
-  patient_joao_santos.json
-  patient_ana_costa.json
-  patient_roberto_lima.json
-fhir_server.py   # MCP Server 1 — FHIR CRUD (port 8000)
-triage_server.py # MCP Server 2 — contextual triage (port 8001)
+.env                        # FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_* — NOT tracked in git
+.env.example                # Template without credentials
+requirements.txt            # Python dependencies
+Dockerfile                  # Python 3.12-slim image for the triage service
+entrypoint.sh               # Container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
+seed_data.py                # Script to load/clean/list test patients
+seed_data/                  # FHIR JSON bundles for loading
+    patient_maria_silva.json
+    patient_joao_santos.json
+    patient_ana_costa.json
+    patient_roberto_lima.json
+fhir_server.py              # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py            # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
-agent.py         # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
-cli.py           # Interactive CLI interface
-app.py           # Gradio chat UI — Web (:7860)
-start_servers.sh # Script to start the 3 MCP servers + Gradio (manual)
-PLAN.md          # This file — architecture plan
-PROGRESS.md      # Progress history, discoveries and decisions
-README.md        # Usage instructions
-```
-python/triage/
-.env             # FHIR_BASE_URL, OPENAI_API_KEY
-requirements.txt # dependencies
-seed_data.py     # script to load test patients into FHIR
-seed_data/       # FHIR JSON bundles for loading
-  patient_maria_silva.json
-  patient_joao_santos.json
-  patient_ana_costa.json
-  patient_roberto_lima.json
-fhir_server.py   # MCP Server 1 — FHIR CRUD (port 8000)
-triage_server.py # MCP Server 2 — contextual triage (port 8001)
-clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
-agent.py         # agent core (factory, system prompt)
-cli.py           # interactive CLI interface
-app.py           # Gradio chat UI
-README.md        # usage instructions
+agent.py                    # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+cli.py                      # Interactive CLI interface
+app.py                      # Gradio chat UI with trace panel — Web (:7860)
+start_servers.sh            # Script to start the 3 MCP servers + Gradio (manual)
+PLAN.md                     # This file — architecture plan
+PROGRESS.md                 # Progress history, discoveries and decisions
+README.md                   # Usage instructions
 ```
 
 ## MCP Servers — Tools
@@ -111,11 +102,13 @@ README.md        # usage instructions
 | `create_encounter(patient_id, reason, priority)` | POST /Encounter | Pre-consultation encounter |
 | `create_flag_and_task(patient_id, flag_detail, task_detail, priority)` | POST /Flag + POST /Task | Alert + follow-up |
 
-### triage_server.py (port 8001) — 4 tools
+### triage_server.py (port 8001) — 5 tools
 
 | Tool | Description |
 |---|---|
 | `build_contextual_questions(patient_context)` | Generates contextual questions based on FHIR history |
+| `get_next_triage_question(patient_context, covered_topics)` | Returns the next triage question (one at a time) |
+| `get_all_triage_topics(patient_context)` | Lists all triage topics for a patient context |
 | `parse_symptoms(patient_response)` | Extracts symptoms, duration, severity |
 | `check_red_flags(symptoms, conditions)` | Checks warning signs |
 | `build_questionnaire_response_data(patient_id, questions, answers)` | Builds QuestionnaireResponse FHIR |
@@ -131,16 +124,17 @@ README.md        # usage instructions
 
 ## Techniques
 
-- **FHIR Client**: requests with Basic Auth (_SYSTEM:SYS) against http://localhost:32783/fhir/r4 (host) or http://localhost:52773/fhir/r4 (container)
+- **FHIR Client**: requests with Basic Auth (_SYSTEM:SYS) against http://localhost:32783/fhir/r4 (host) or http://iris:52773/fhir/r4 (triage container)
 - **LLM**: OpenAI gpt-4o-mini via langchain-openai
 - **MCP**: fastmcp with transport="streamable-http"
 - **Agent**: langchain-mcp-adapters + MultiServerMCPClient + load_mcp_tools + create_agent (with `system_prompt`)
-- **UI**: Gradio gr.ChatInterface (6.x, without `type="messages"`)
-- **Deploy**: Docker with custom-entrypoint.sh that auto-starts MCP servers + seed data
+- **UI**: Gradio gr.ChatInterface (6.x, without `type="messages"`) with trace panel
+- **Observability**: LangSmith tracing (optional, enabled when LANGSMITH_API_KEY is set)
+- **Deploy**: Docker Compose with 2 services (iris + triage) on fhir-net bridge network
 
 ## Discoveries & Challenges
 
-> Full details in [PROGRESS.md](./PROGRESS.md#descobertas-tecnicas-lessons-learned)
+> Full details in [PROGRESS.md](./PROGRESS.md#technical-discoveries-lessons-learned)
 
 | # | Discovery | Impact | Solution |
 |---|---|---|---|
@@ -152,6 +146,7 @@ README.md        # usage instructions
 | 6 | `create_agent()` supports `system_prompt` | Manual SystemMessage is fragile | Use framework's native parameter |
 | 7 | MCP sessions via `async with` close after context manager | Agent loses access to MCP tools | Use `_client.get_tools()` (per-call session) instead of `load_mcp_tools(session)` |
 | 8 | IRIS FHIR `name` param does not support full name | `?name=Maria Silva` returns 0 | `search_patients` tries family, given, and partial name |
+| 9 | Container-internal vs host URLs for FHIR | Wrong URL used from triage container | Use `http://iris:52773/fhir/r4` inside Docker, `http://localhost:32783/fhir/r4` on host |
 
 ## Status
 
@@ -161,15 +156,18 @@ README.md        # usage instructions
 - [x] Agent core (`agent.py`), CLI (`cli.py`) and Web UI (`app.py`) functional
 - [x] 4 test patients with complete FHIR bundles
 - [x] Seed data with load/clean/list + `triage-seed` tag
-- [x] Complete Docker infrastructure (auto-startup MCP + seed data)
+- [x] Complete Docker infrastructure (2 services: iris + triage, auto-startup MCP + seed data)
 - [x] End-to-end test with Maria Silva
+- [x] Patient search by name (`search_patients`)
+- [x] Test Gradio UI externally (host port 7860)
+- [x] Test with all 4 patients (Joao, Ana, Roberto)
+- [x] LangSmith observability (optional)
+- [x] Gradio trace panel for real-time agent step progress
+- [x] Translation to English (code + docs)
 
 ### Pending
 
-- [ ] Test Gradio UI externally (host port 7860)
-- [ ] Test with Joao Santos, Ana Costa, Roberto Lima
 - [ ] Adjust prompt for consistent creation of Flag/Task/QuestionnaireResponse
-- [ ] Add patient search by name
 - [ ] Container restart test
 
 ### Future Work
@@ -188,13 +186,13 @@ README.md        # usage instructions
 docker compose build --no-cache --progress=plain
 docker compose up -d
 
-# Check MCP servers
-docker compose exec iris bash -c 'cat /tmp/fhir_server.log'
-docker compose exec iris bash -c 'cat /tmp/triage_server.log'
-docker compose exec iris bash -c 'cat /tmp/cr_server.log'
+# Check MCP servers (triage container)
+docker compose exec triage bash -c 'cat /tmp/fhir_server.log'
+docker compose exec triage bash -c 'cat /tmp/triage_server.log'
+docker compose exec triage bash -c 'cat /tmp/cr_server.log'
 
 # Check seed data
-docker compose exec iris bash -c 'cd /home/irisowner/irisdev/python/triage && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py list'
+docker compose exec triage bash -c 'cd /app && FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py list'
 
 # Access Gradio UI
 # http://localhost:7860
@@ -203,14 +201,14 @@ docker compose exec iris bash -c 'cd /home/irisowner/irisdev/python/triage && FH
 # http://localhost:32783/fhir/r4/Patient
 ```
 
-### Manual (inside container)
+### Manual (inside triage container)
 
 ```bash
-docker compose exec iris bash
-cd /home/irisowner/irisdev/python/triage
+docker compose exec triage bash
+cd /app
 
 # 1. Load patients
-FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py load
+FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py load
 
 # 2. Start MCP servers + Gradio
 bash start_servers.sh
