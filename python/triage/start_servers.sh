@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-cd /home/irisowner/irisdev/python/triage
+cd /app
 
-export FHIR_BASE_URL=http://localhost:52773/fhir/r4
+export FHIR_BASE_URL=http://iris:52773/fhir/r4
 export FHIR_USER=_SYSTEM
 export FHIR_PASS=SYS
 export FHIR_MCP_URL=http://localhost:8000/mcp
