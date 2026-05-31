@@ -50,7 +50,9 @@ def _get_llm_cache():
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
                 from langchain_community.cache import SQLiteCache
-            db_path = os.getenv("LLM_CACHE_DB_PATH", os.path.join(os.path.expanduser("~"), ".cache", "langchain_cache.db"))
+            default_db_path = os.path.join(os.path.expanduser("~"), ".cache", "langchain_cache.db")
+            db_path = os.getenv("LLM_CACHE_DB_PATH", default_db_path)
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             return _NormalizedSQLiteCache(database_path=db_path)
         except ImportError:
             print("WARNING: langchain-community not installed, LLM cache disabled")
