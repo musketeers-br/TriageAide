@@ -1,105 +1,108 @@
-## Agente de Triagem Pre-Consulta
+## Pre-Consultation Triage Agent
 
-**Objetivo:** preparar o atendimento *antes* do paciente falar com o profissional.
+**Goal:** prepare the consultation *before* the patient speaks with the physician.
 
-### Como funciona
+### How it works
 
-1. **FHIR Query First** — O agente consulta o historico do paciente no FHIR Server (InterSystems IRIS for Health) ANTES de iniciar a conversa
-2. **Triagem Contextual** — Com o historico em maos, gera perguntas inteligentes e personalizadas (nao genericas)
-3. **Conversa com o Paciente** — Coleta sintomas, historico recente e sinais de alerta via chat
-4. **Raciocinio Clinico** — Cruza historico FHIR + sintomas novos para avaliar risco e prioridade
-5. **Atualizacao FHIR Bidirecional** — Cria novos recursos FHIR no servidor (Observation, Encounter, Flag, Task, QuestionnaireResponse)
+1. **FHIR Query First** — The agent queries the patient's history on the FHIR Server (InterSystems IRIS for Health) BEFORE starting the conversation
+2. **Contextual Triage** — With history in hand, generates intelligent and personalized questions (not generic)
+3. **Conversation with the Patient** — Collects symptoms, recent history, and warning signs via chat
+4. **Clinical Reasoning** — Crosses FHIR history + new symptoms to assess risk and priority
+5. **Bidirectional FHIR Update** — Creates new FHIR resources on the server (Observation, Encounter, Flag, Task, QuestionnaireResponse)
 
-### Frase-chave
+### Key Phrase
 
 > "The agent first retrieves patient history from a FHIR server, builds contextual clinical understanding, and performs an adaptive pre-consultation triage that enriches and updates the longitudinal patient record."
 
-### Stack Tecnologica
+### Tech Stack
 
-| Componente | Tecnologia |
+| Component | Technology |
 |---|---|
 | FHIR Server | InterSystems IRIS for Health Community Edition |
-| MCP Servers | FastMCP (streamable-http) — 3 servers, 19 ferramentas |
-| Agente | LangChain + langchain-mcp-adapters + OpenAI gpt-4o-mini |
-| UI | Gradio ChatInterface |
-| Deploy | Docker (auto-startup MCP servers + seed data) |
+| MCP Servers | FastMCP (streamable-http) — 3 servers, 21 tools |
+| Agent | LangChain + langchain-mcp-adapters + OpenAI gpt-4o-mini |
+| Observability | LangSmith tracing (optional) |
+| UI | Gradio ChatInterface with trace panel |
+| Deploy | Docker Compose (2 services: iris + triage) |
 
-### Arquitetura
+### Architecture
 
 ```
-FHIR Server (IRIS for Health)
-    |
-    +-- fhir_server.py (MCP :8000) — 11 ferramentas CRUD FHIR
-    |       get_patient, get_conditions, get_medications, get_observations,
-    |       get_allergies, get_encounters,
-    |       create_observation, create_condition, create_questionnaire_response,
-    |       create_encounter, create_flag_and_task
-    |
-    +-- triage_server.py (MCP :8001) — 4 ferramentas de triagem
-    |       build_contextual_questions, parse_symptoms,
-    |       check_red_flags, build_questionnaire_response_data
-    |
-    +-- clinical_reasoning_server.py (MCP :8002) — 4 ferramentas de raciocinio
-    |       assess_clinical_risk, suggest_priority,
-    |       generate_clinical_summary, identify_follow_up_tasks
-    |
-    +-- LangChain Agent (agent.py / cli.py / app.py)
-            system_prompt com 5 etapas obrigatorias
-            responde em portugues brasileiro
+FHIR Server (IRIS for Health)               ← iris container
+|
++-- fhir_server.py (MCP :8000) — 12 FHIR CRUD tools
+|   search_patients, get_patient, get_patient_conditions, get_patient_medications,
+|   get_patient_observations, get_patient_allergies, get_patient_encounters,
+|   create_observation, create_condition, create_questionnaire_response,
+|   create_encounter, create_flag_and_task
+|
++-- triage_server.py (MCP :8001) — 5 contextual triage tools
+|   build_contextual_questions, get_next_triage_question,
+|   get_all_triage_topics, parse_symptoms,
+|   check_red_flags, build_questionnaire_response_data
+|
++-- clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
+|   assess_clinical_risk, suggest_priority,
+|   generate_clinical_summary, identify_follow_up_tasks
+|
++-- LangChain Agent (agent.py / cli.py / app.py)
+    system_prompt with 5 mandatory steps
+    responds in English
 ```
 
-### Recursos FHIR usados
+### FHIR Resources Used
 
-**Leitura (historico do paciente):**
-- Patient — dados demograficos
-- Condition — condicoes/_diagnosticos
-- MedicationRequest — medicacoes em uso
-- Observation — resultados laboratoriais e sinais vitais
-- AllergyIntolerance — alergias
-- Encounter — encontros anteriores
+**Read (patient history):**
+- Patient — demographics
+- Condition — diagnoses
+- MedicationRequest — current medications
+- Observation — lab results and vital signs
+- AllergyIntolerance — allergies
+- Encounter — previous encounters
 
-**Escrita (triagem pre-consulta):**
-- Observation — novos sintomas relatados
-- QuestionnaireResponse — triagem estruturada
-- Encounter — encontro de pre-consulta preparado
-- Flag — alertas clinicos (red flags)
-- Task — tarefas de follow-up para o medico
-- Condition — novas condicoes identificadas (se aplicavel)
+**Write (pre-consultation triage):**
+- Observation — reported new symptoms
+- QuestionnaireResponse — structured triage
+- Encounter — prepared pre-consultation encounter
+- Flag — clinical alerts (red flags)
+- Task — follow-up tasks for the physician
+- Condition — new conditions identified (if applicable)
 
-### Pacientes de Teste
+### Test Patients
 
-| Paciente | Idade | Cenario | Prioridade Esperada |
+| Patient | Age | Scenario | Expected Priority |
 |---|---|---|---|
-| Maria Silva | 58, F | DM2 + HAS descompensada | Urgente |
-| Joao Santos | 72, M | Polifarmacia + IC + FA | Urgente/Emergencia |
-| Ana Costa | 28, F | Sem condicoes ativas | Rotina |
-| Roberto Lima | 65, M | DPOC + SpO2 93% + red flags | Emergencia |
+| Maria Silva | 58, F | DM2 + uncontrolled Hypertension | Urgent |
+| Joao Santos | 72, M | Polypharmacy + HF + AF | Urgent/Emergency |
+| Ana Costa | 28, F | No active conditions | Routine |
+| Roberto Lima | 65, M | COPD + SpO2 93% + red flags | Emergency |
 
-### Resultado
+### Result
 
-O medico recebe:
+The physician receives:
 
-- resumo clinico automatico com historico + novos sintomas
-- prioridade de atendimento sugerida (routine/urgent/emergency)
-- alertas de red flags (Flag resource)
-- tarefas de follow-up (Task resource)
-- QuestionnaireResponse com toda a triagem estruturada
+- automatic clinical summary with history + new symptoms
+- suggested care priority (routine/urgent/emergency)
+- red flag alerts (Flag resource)
+- follow-up tasks (Task resource)
+- QuestionnaireResponse with all structured triage
 
-Tudo registrado como recursos FHIR no prontuario — FHIR vira **memoria clinica viva**.
+All recorded as FHIR resources in the patient record — FHIR becomes a **living clinical memory**.
 
-### Diferencial para o Concurso
+### Differentiator for the Contest
 
-O agente NAO e um chatbot generico que cria FHIR do zero. Ele e um **AI Agent interoperavel que raciocina sobre dados clinicos existentes**:
+The agent is NOT a generic chatbot that creates FHIR from scratch. It is an **interoperable AI Agent that reasons over existing clinical data**:
 
-1. **FHIR-First**: consulta historico ANTES de interagir com o paciente
-2. **Triagem Contextual**: perguntas inteligentes baseadas no historico real
-3. **Bidirecional**: le E escreve no FHIR Server
-4. **MCP Architecture**: 3 servers especializados com 19 ferramentas
-5. **Longitudinal**: entende continuidade do cuidado (ex: "ultima consulta ha 8 meses")
+1. **FHIR-First**: queries history BEFORE interacting with the patient
+2. **Contextual Triage**: intelligent questions based on real clinical history
+3. **Bidirectional**: reads from AND writes to the FHIR Server
+4. **MCP Architecture**: 3 specialized servers with 21 tools
+5. **Longitudinal**: understands care continuity (e.g., "last visit 8 months ago")
+6. **Observable**: LangSmith tracing + Gradio trace panel for agent inspection
 
-### Interacao
+### Interaction
 
-- **Web UI**: Gradio ChatInterface em http://localhost:7860
-- **CLI**: Loop interativo via `python cli.py`
-- **Idioma**: Portugues brasileiro
-- **Futuro**: Interacao por voz (planejado)
+- **Web UI**: Gradio ChatInterface at http://localhost:7860 (with trace panel)
+- **CLI**: Interactive loop via `python cli.py`
+- **Language**: English
+- **Future**: Voice interaction (planned)

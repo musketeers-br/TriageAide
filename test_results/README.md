@@ -7,7 +7,7 @@ Automated multi-turn dialogue quality tests for the FHIR-First Pre-Consultation 
 1. **One question per turn** — Agent must ask at most 1 question per response (turn 1 excluded as greeting)
 2. **No repeated questions** — Agent must not ask the same question twice
 3. **FHIR context usage** — Agent must reference patient data from the FHIR server in responses
-4. **Natural Portuguese conversation** — Responses in Brazilian Portuguese
+4. **Natural English conversation** — Responses in English
 
 ## Test Configuration
 
@@ -20,7 +20,7 @@ Automated multi-turn dialogue quality tests for the FHIR-First Pre-Consultation 
 | **MCP Servers** | fhir_server (:8000), triage_server (:8001), clinical_reasoning_server (:8002) |
 | **FHIR Server** | InterSystems IRIS for Health (JsonAdvSql strategy) |
 | **Session State** | Full message history including ToolMessages preserved across turns |
-| **Language** | Brazilian Portuguese |
+| **Language** | English |
 
 ## Patients Tested
 
@@ -34,10 +34,10 @@ Automated multi-turn dialogue quality tests for the FHIR-First Pre-Consultation 
 ## How to Run
 
 ```bash
-# Inside the Docker container
-docker compose exec iris bash
-cd /home/irisowner/irisdev/python/triage
-export FHIR_BASE_URL=http://localhost:52773/fhir/r4
+# Inside the triage container
+docker compose exec triage bash
+cd /app
+export FHIR_BASE_URL=http://iris:52773/fhir/r4
 
 # Run individual tests
 python3 test_dialogue_maria_silva.py
@@ -45,7 +45,7 @@ python3 test_dialogue_joao_santos.py
 python3 test_dialogue_ana_costa.py
 python3 test_dialogue_roberto_lima.py
 
-# Results are saved to /home/irisowner/irisdev/test_results/ (mounted as test_results/ on host)
+# Results are saved to the test_results/ directory
 ```
 
 ## Result Files

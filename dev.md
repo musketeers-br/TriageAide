@@ -1,116 +1,137 @@
-# useful commands
+# Useful Commands
 
-## clean up docker
+## Clean up Docker
+
 ```bash
 docker system prune -f
 ```
 
-## build container with no cache
+## Build containers with no cache
+
 ```bash
 docker compose build --no-cache --progress=plain
 ```
 
-## start container
+## Start containers
+
 ```bash
 docker compose up -d
 ```
 
-## open terminal to docker
+## Stop containers
+
+```bash
+docker compose down
+```
+
+## Open IRIS terminal
+
 ```bash
 docker compose exec iris iris session iris -U FHIRServer
 ```
 
 ## FHIR Namespace setup
 
+```
 Do ##class(HS.Util.Installer.Foundation).Install(namespace)
+```
 
+## FHIR server configuration setup
 
-## fhir server configuration setup
 ```bash
 do ##class(HS.FHIRServer.ConsoleSetup).Setup()
 ```
 
-## load fhir resources
+## Load FHIR resources
+
 ```bash
 zw ##class(HS.FHIRServer.Tools.DataLoader).SubmitResourceFiles("/irisdev/app/output/fhir/", "FHIRServer", "/fhir/r4")
-
-kill ^%ISCLOG
-
-kill ^ISCLOG
-
-set ^%ISCLOG=3
-
-
-
-http://localhost:32783/fhirUI/irisfhir.json
-http://localhost:32783/fhirUI/irisfhir_swagger.json
+```
 
 ---
 
-## Triage App — Agente de Triagem Pre-Consulta
+## Triage App — Pre-Consultation Triage Agent
 
-### Rebuild do container (apos mudancas em ObjectScript ou Dockerfile)
+### Rebuild containers (after changes in ObjectScript or Dockerfile)
+
 ```bash
 docker compose build --no-cache --progress=plain && docker compose up -d
 ```
 
-### Verificar status dos MCP servers
+### Check MCP server status (triage container)
+
 ```bash
-docker compose exec iris bash -c 'cat /tmp/fhir_server.log | tail -5'
-docker compose exec iris bash -c 'cat /tmp/triage_server.log | tail -5'
-docker compose exec iris bash -c 'cat /tmp/cr_server.log | tail -5'
+docker compose exec triage bash -c 'tail -5 /tmp/fhir_server.log'
+docker compose exec triage bash -c 'tail -5 /tmp/triage_server.log'
+docker compose exec triage bash -c 'tail -5 /tmp/cr_server.log'
 ```
 
-### Ver log completo de startup dos MCP servers
+### Restart MCP servers manually
+
 ```bash
-docker compose exec iris bash -c 'cat /tmp/mcp_startup.log'
+docker compose exec triage bash -c 'pkill -f fhir_server.py; pkill -f triage_server.py; pkill -f clinical_reasoning_server.py'
+docker compose exec triage bash -c 'cd /app && bash start_servers.sh'
 ```
 
-### Reiniciar MCP servers manualmente
+### Reload test data (seed data)
+
 ```bash
-docker compose exec iris bash -c 'pkill -f fhir_server.py; pkill -f triage_server.py; pkill -f clinical_reasoning_server.py'
-docker compose exec iris bash /home/irisowner/irisdev/start_mcp_servers.sh
+docker compose exec triage bash -c 'cd /app && FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py clean && FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py load'
 ```
 
-### Recarregar dados de teste (seed data)
+### List test patients
+
 ```bash
-docker compose exec iris bash -c 'cd /home/irisowner/irisdev/python/triage && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py clean && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py load'
+docker compose exec triage bash -c 'cd /app && FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py list'
 ```
 
-### Listar pacientes de teste
-```bash
-docker compose exec iris bash -c 'cd /home/irisowner/irisdev/python/triage && FHIR_BASE_URL=http://localhost:52773/fhir/r4 python3 seed_data.py list'
-```
+### Access the triage UI
 
-### Acessar a UI do triage
 ```
 http://localhost:7860
 ```
 
-### Rodar agente CLI manualmente
+### Run agent CLI manually
+
 ```bash
-docker compose exec iris bash
-cd /home/irisowner/irisdev/python/triage
-FHIR_BASE_URL=http://localhost:52773/fhir/r4 OPENAI_API_KEY=sk-... python3 cli.py
+docker compose exec triage bash
+cd /app
+FHIR_BASE_URL=http://iris:52773/fhir/r4 OPENAI_API_KEY=sk-... python3 cli.py
 ```
 
-### Rodar MCP servers + Gradio manualmente (debug)
+### Run MCP servers + Gradio manually (debug)
+
 ```bash
-docker compose exec iris bash
-cd /home/irisowner/irisdev/python/triage
+docker compose exec triage bash
+cd /app
 bash start_servers.sh
 ```
 
-### Portas do triage app
-| Porta | Servico |
+### Check triage container logs
+
+```bash
+docker compose logs triage
+```
+
+### Triage app ports
+
+| Port | Service |
 |---|---|
 | 8000 | FHIR MCP Server |
 | 8001 | Triage MCP Server |
 | 8002 | Clinical Reasoning MCP Server |
 | 7860 | Gradio Web UI |
 
-### FHIR API (verificar pacientes)
+### FHIR API (verify patients)
+
 ```bash
 curl -u _SYSTEM:SYS http://localhost:32783/fhir/r4/Patient?_count=5 -H "Accept: application/fhir+json"
 ```
 
+### Debug URLs
+
+```
+http://localhost:32783/fhirUI/irisfhir.json
+http://localhost:32783/fhirUI/irisfhir_swagger.json
+http://localhost:32783/fhir/r4/metadata
+```
