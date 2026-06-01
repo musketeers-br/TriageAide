@@ -550,9 +550,15 @@ CSS = """
 
 
 def main():
+    _el_head = (
+        '<script src="https://unpkg.com/@elevenlabs/convai-widget-embed"'
+        ' async type="text/javascript"></script>'
+    )
+
     with gr.Blocks(
         fill_height=True,
         title="TriageAide — FHIR-First Pre-Consultation Triage",
+        head=_el_head,
     ) as demo:
         gr.Markdown("# 🏥 TriageAide — FHIR-First Pre-Consultation Triage")
 
@@ -626,17 +632,31 @@ def main():
                     if not agent_id:
                         return (
                             '<div style="padding:32px;text-align:center;color:#6b7280;">'
-                            '<p style="font-size:15px;">Enter your ElevenLabs Agent ID above and click <strong>Load Widget</strong>.<br>'
-                            'Digite o ID do agente ElevenLabs acima e clique em <strong>Carregar Widget</strong>.</p>'
+                            '<p style="font-size:15px;">Enter your ElevenLabs Agent ID above and click '
+                            '<strong>Load Widget</strong>.<br>'
+                            'Digite o ID do agente ElevenLabs acima e clique em '
+                            '<strong>Carregar Widget</strong>.</p>'
                             '</div>'
                         )
+                    # Primary: custom element (works when head= script loads successfully)
+                    # Fallback iframe is also shown below if the custom element doesn't render
+                    local_bridge = "http://localhost:8003"
+                    iframe_url = f"{local_bridge}/widget?agent_id={agent_id}"
                     return (
-                        '<div style="width:100%;min-height:500px;display:flex;'
-                        'justify-content:center;align-items:center;padding:16px;">'
+                        # Custom element — rendered by the globally-loaded ElevenLabs script
+                        '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;">'
                         f'<elevenlabs-convai agent-id="{agent_id}" '
-                        'style="width:100%;max-width:600px;"></elevenlabs-convai>'
-                        '<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" '
-                        'async type="text/javascript"></script>'
+                        'style="width:100%;max-width:560px;min-height:420px;"></elevenlabs-convai>'
+                        # Separator + iframe fallback (opens in same page area)
+                        '<details style="width:100%;max-width:560px;">'
+                        '<summary style="cursor:pointer;color:#6b7280;font-size:13px;padding:4px 0;">'
+                        '🔄 Widget not showing? Try the standalone version / Widget não apareceu? Tente a versão standalone'
+                        '</summary>'
+                        f'<iframe src="{iframe_url}" width="100%" height="480" '
+                        'style="border:1px solid #e5e7eb;border-radius:12px;margin-top:8px;" '
+                        'allow="microphone; camera; autoplay; clipboard-write" allowfullscreen>'
+                        '</iframe>'
+                        '</details>'
                         '</div>'
                     )
 

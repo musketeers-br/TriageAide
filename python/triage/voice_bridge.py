@@ -14,7 +14,8 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
@@ -45,6 +46,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="TriageAide Voice Bridge", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 _bearer = HTTPBearer()
 
 
@@ -107,6 +116,71 @@ async def _sse_stream(completion_id: str, text: str):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "triageaide-voice-bridge"}
+
+
+_WIDGET_HTML = """\
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TriageAide Voice</title>
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #f1f5f9;
+    }}
+    .header {{
+      text-align: center;
+      margin-bottom: 24px;
+    }}
+    .header h1 {{ font-size: 18px; font-weight: 600; color: #94a3b8; }}
+    .widget-container {{ width: 100%; max-width: 480px; padding: 0 16px; }}
+    .no-agent {{
+      text-align: center;
+      padding: 48px 24px;
+      color: #64748b;
+      border: 1px dashed #334155;
+      border-radius: 12px;
+    }}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🏥 TriageAide Voice / Triagem por Voz</h1>
+  </div>
+  <div class="widget-container">
+    {widget_content}
+  </div>
+  <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+</body>
+</html>
+"""
+
+
+@app.get("/widget", response_class=HTMLResponse)
+async def widget_page(agent_id: str = ""):
+    """Standalone HTML page containing the ElevenLabs widget — safe for iframe embedding."""
+    if not agent_id:
+        agent_id = os.getenv("ELEVENLABS_AGENT_ID", "")
+
+    if agent_id:
+        widget_content = f'<elevenlabs-convai agent-id="{agent_id}" style="width:100%;"></elevenlabs-convai>'
+    else:
+        widget_content = (
+            '<div class="no-agent">'
+            '<p>No Agent ID configured.<br>Set <code>ELEVENLABS_AGENT_ID</code> or pass <code>?agent_id=</code></p>'
+            '</div>'
+        )
+
+    return HTMLResponse(content=_WIDGET_HTML.format(widget_content=widget_content))
 
 
 @app.post("/v1/chat/completions")
