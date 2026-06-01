@@ -2,3 +2,6 @@
 .env
 .venv
 .langchain_cache.db
+__pycache__/
+*.pyc
+*.pyo
