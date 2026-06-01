@@ -618,56 +618,64 @@ def main():
                     "O agente detecta automaticamente o idioma e responde no mesmo idioma."
                 )
 
-                _el_widget_id = os.getenv("ELEVENLABS_WIDGET_ID", "")
-                _el_agent_id = os.getenv("ELEVENLABS_AGENT_ID", "")
+                _el_agent_id = os.getenv("ELEVENLABS_WIDGET_ID", "") or os.getenv("ELEVENLABS_AGENT_ID", "")
                 _bridge_url = os.getenv("VOICE_BRIDGE_URL", "http://localhost:8003")
 
-                if _el_widget_id:
-                    gr.HTML(
-                        f'<div style="width:100%;min-height:520px;display:flex;'
-                        f'justify-content:center;align-items:center;">'
-                        f'<elevenlabs-convai agent-id="{_el_widget_id}"></elevenlabs-convai>'
-                        f'<script src="https://unpkg.com/@elevenlabs/convai-widget-embed"'
-                        f' async type="text/javascript"></script>'
-                        f'</div>'
+                def _widget_html(agent_id: str) -> str:
+                    agent_id = (agent_id or "").strip()
+                    if not agent_id:
+                        return (
+                            '<div style="padding:32px;text-align:center;color:#6b7280;">'
+                            '<p style="font-size:15px;">Enter your ElevenLabs Agent ID above and click <strong>Load Widget</strong>.<br>'
+                            'Digite o ID do agente ElevenLabs acima e clique em <strong>Carregar Widget</strong>.</p>'
+                            '</div>'
+                        )
+                    return (
+                        '<div style="width:100%;min-height:500px;display:flex;'
+                        'justify-content:center;align-items:center;padding:16px;">'
+                        f'<elevenlabs-convai agent-id="{agent_id}" '
+                        'style="width:100%;max-width:600px;"></elevenlabs-convai>'
+                        '<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" '
+                        'async type="text/javascript"></script>'
+                        '</div>'
                     )
-                elif _el_agent_id:
-                    gr.HTML(
-                        f'<div style="padding:48px;text-align:center;">'
-                        f'<p style="font-size:16px;margin-bottom:24px;">'
-                        f'Click to start a voice session / Clique para iniciar a sessão de voz:</p>'
-                        f'<a href="https://elevenlabs.io/app/talk/{_el_agent_id}"'
-                        f' target="_blank" rel="noopener">'
-                        f'<button style="padding:16px 36px;font-size:18px;font-weight:600;'
-                        f'background:#2563eb;color:white;border:none;border-radius:10px;'
-                        f'cursor:pointer;">🎙️ Start Voice Triage / Iniciar Triagem por Voz'
-                        f'</button></a></div>'
+
+                with gr.Row():
+                    agent_id_box = gr.Textbox(
+                        value=_el_agent_id,
+                        placeholder="agent_XXXXXXXXXXXXXXXXXXXXXXXX",
+                        label="ElevenLabs Agent ID",
+                        scale=5,
+                        interactive=True,
                     )
-                else:
+                    load_widget_btn = gr.Button("🎙️ Load Widget / Carregar Widget", variant="primary", scale=2)
+
+                voice_widget = gr.HTML(value=_widget_html(_el_agent_id))
+
+                load_widget_btn.click(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
+                agent_id_box.submit(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
+
+                with gr.Accordion("⚙️ Setup Instructions / Instruções de Configuração", open=not bool(_el_agent_id)):
                     gr.Markdown(f"""
-**Setup Required / Configuração Necessária**
-
-**English — To enable voice triage:**
-1. Create an agent at [ElevenLabs Conversational AI](https://elevenlabs.io/conversational-ai) using the **Custom LLM** option
-2. Set **LLM URL** to your voice bridge: `{_bridge_url}/v1/chat/completions`
-3. Set **Authorization**: Bearer `<VOICE_BRIDGE_SECRET>`
+**English — Custom LLM setup:**
+1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
+2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
+3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
 4. Select a Brazilian Portuguese voice and enable **language auto-detection**
-5. Add `ELEVENLABS_AGENT_ID` and optionally `ELEVENLABS_WIDGET_ID` to your `.env` file
+5. Copy the Agent ID from the URL and paste it in the field above
 
----
-
-**Português — Para habilitar a triagem por voz:**
-1. Crie um agente no [ElevenLabs Conversational AI](https://elevenlabs.io/conversational-ai) usando a opção **Custom LLM**
-2. Configure o **LLM URL** para sua voice bridge: `{_bridge_url}/v1/chat/completions`
-3. Configure **Authorization**: Bearer `<VOICE_BRIDGE_SECRET>`
+**Português — Configuração do Custom LLM:**
+1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
+2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
+3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
 4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
-5. Adicione `ELEVENLABS_AGENT_ID` e opcionalmente `ELEVENLABS_WIDGET_ID` no arquivo `.env`
+5. Copie o Agent ID da URL e cole no campo acima
 """)
 
                 with gr.Row():
                     gr.Markdown(
-                        f"**Voice Bridge URL:** `{_bridge_url}/v1/chat/completions` &nbsp;|&nbsp; "
-                        f"**Health check:** `{_bridge_url}/health`"
+                        f"**Voice Bridge:** `{_bridge_url}/v1/chat/completions` &nbsp;|&nbsp; "
+                        f"**Health:** `{_bridge_url}/health`"
                     )
 
         trace_state = gr.State([])
