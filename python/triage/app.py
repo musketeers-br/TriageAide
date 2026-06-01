@@ -556,54 +556,119 @@ def main():
     ) as demo:
         gr.Markdown("# 🏥 TriageAide — FHIR-First Pre-Consultation Triage")
 
-        view_mode = gr.State("Side-by-side")
+        with gr.Tabs():
+            with gr.Tab("💬 Chat"):
+                view_mode = gr.State("Side-by-side")
 
-        with gr.Row():
-            view_toggle = gr.Radio(
-                choices=["Side-by-side", "Compact"],
-                value="Side-by-side",
-                label="View Mode",
-                interactive=True,
-                scale=2,
-            )
-            clear_all = gr.Button("🗑️ Clear All", variant="secondary", scale=1)
-
-        with gr.Row(equal_height=True):
-            with gr.Column(scale=3) as chat_col:
-                chatbot = gr.Chatbot(
-                    label="Patient Chat",
-                    height=650,
-                    layout="panel",
-                    placeholder="<strong>Enter a patient ID or name to begin triage</strong>",
-                )
                 with gr.Row():
-                    msg_input = gr.Textbox(
-                        placeholder="Type your message and press Enter...",
-                        show_label=False,
-                        scale=4,
-                        autofocus=True,
+                    view_toggle = gr.Radio(
+                        choices=["Side-by-side", "Compact"],
+                        value="Side-by-side",
+                        label="View Mode",
+                        interactive=True,
+                        scale=2,
                     )
-                    send_btn = gr.Button("Send", variant="primary", scale=1)
-                with gr.Row():
-                    gr.Examples(
-                        examples=[
-                            "Start triage for patient Maria Silva",
-                            "Triage for patient Joao Santos",
-                            "Patient Ana Costa history",
-                            "Triage for patient Roberto Lima",
-                        ],
-                        inputs=msg_input,
-                    )
+                    clear_all = gr.Button("🗑️ Clear All", variant="secondary", scale=1)
 
-            with gr.Column(scale=2) as trace_col:
-                trace = gr.Chatbot(
-                    label="Agent Trace",
-                    elem_id="trace-panel",
-                    height=650,
-                    layout="panel",
-                    group_consecutive_messages=False,
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=3) as chat_col:
+                        chatbot = gr.Chatbot(
+                            label="Patient Chat",
+                            height=650,
+                            layout="panel",
+                            placeholder="<strong>Enter a patient ID or name to begin triage</strong>",
+                        )
+                        with gr.Row():
+                            msg_input = gr.Textbox(
+                                placeholder="Type your message and press Enter...",
+                                show_label=False,
+                                scale=4,
+                                autofocus=True,
+                            )
+                            send_btn = gr.Button("Send", variant="primary", scale=1)
+                        with gr.Row():
+                            gr.Examples(
+                                examples=[
+                                    "Start triage for patient Maria Silva",
+                                    "Triage for patient Joao Santos",
+                                    "Patient Ana Costa history",
+                                    "Triage for patient Roberto Lima",
+                                    "Iniciar triagem para Maria Silva",
+                                    "Triagem para paciente João Santos",
+                                ],
+                                inputs=msg_input,
+                            )
+
+                    with gr.Column(scale=2) as trace_col:
+                        trace = gr.Chatbot(
+                            label="Agent Trace",
+                            elem_id="trace-panel",
+                            height=650,
+                            layout="panel",
+                            group_consecutive_messages=False,
+                        )
+                        clear_trace = gr.Button("Clear Trace", size="sm")
+
+            with gr.Tab("🎙️ Voice (ElevenLabs)"):
+                gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
+                gr.Markdown(
+                    "Speak with the triage agent in **English** or **Português (Brasil)**. "
+                    "The agent automatically detects your language and responds in kind.\n\n"
+                    "Fale com o agente de triagem em **inglês** ou **Português (Brasil)**. "
+                    "O agente detecta automaticamente o idioma e responde no mesmo idioma."
                 )
-                clear_trace = gr.Button("Clear Trace", size="sm")
+
+                _el_widget_id = os.getenv("ELEVENLABS_WIDGET_ID", "")
+                _el_agent_id = os.getenv("ELEVENLABS_AGENT_ID", "")
+                _bridge_url = os.getenv("VOICE_BRIDGE_URL", "http://localhost:8003")
+
+                if _el_widget_id:
+                    gr.HTML(
+                        f'<div style="width:100%;min-height:520px;display:flex;'
+                        f'justify-content:center;align-items:center;">'
+                        f'<elevenlabs-convai agent-id="{_el_widget_id}"></elevenlabs-convai>'
+                        f'<script src="https://unpkg.com/@elevenlabs/convai-widget-embed"'
+                        f' async type="text/javascript"></script>'
+                        f'</div>'
+                    )
+                elif _el_agent_id:
+                    gr.HTML(
+                        f'<div style="padding:48px;text-align:center;">'
+                        f'<p style="font-size:16px;margin-bottom:24px;">'
+                        f'Click to start a voice session / Clique para iniciar a sessão de voz:</p>'
+                        f'<a href="https://elevenlabs.io/app/talk/{_el_agent_id}"'
+                        f' target="_blank" rel="noopener">'
+                        f'<button style="padding:16px 36px;font-size:18px;font-weight:600;'
+                        f'background:#2563eb;color:white;border:none;border-radius:10px;'
+                        f'cursor:pointer;">🎙️ Start Voice Triage / Iniciar Triagem por Voz'
+                        f'</button></a></div>'
+                    )
+                else:
+                    gr.Markdown(f"""
+**Setup Required / Configuração Necessária**
+
+**English — To enable voice triage:**
+1. Create an agent at [ElevenLabs Conversational AI](https://elevenlabs.io/conversational-ai) using the **Custom LLM** option
+2. Set **LLM URL** to your voice bridge: `{_bridge_url}/v1/chat/completions`
+3. Set **Authorization**: Bearer `<VOICE_BRIDGE_SECRET>`
+4. Select a Brazilian Portuguese voice and enable **language auto-detection**
+5. Add `ELEVENLABS_AGENT_ID` and optionally `ELEVENLABS_WIDGET_ID` to your `.env` file
+
+---
+
+**Português — Para habilitar a triagem por voz:**
+1. Crie um agente no [ElevenLabs Conversational AI](https://elevenlabs.io/conversational-ai) usando a opção **Custom LLM**
+2. Configure o **LLM URL** para sua voice bridge: `{_bridge_url}/v1/chat/completions`
+3. Configure **Authorization**: Bearer `<VOICE_BRIDGE_SECRET>`
+4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
+5. Adicione `ELEVENLABS_AGENT_ID` e opcionalmente `ELEVENLABS_WIDGET_ID` no arquivo `.env`
+""")
+
+                with gr.Row():
+                    gr.Markdown(
+                        f"**Voice Bridge URL:** `{_bridge_url}/v1/chat/completions` &nbsp;|&nbsp; "
+                        f"**Health check:** `{_bridge_url}/health`"
+                    )
 
         trace_state = gr.State([])
 

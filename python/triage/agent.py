@@ -184,6 +184,41 @@ def _wrap_tools_with_cache(tools, tool_cache):
         cached_tools.append(tool)
     return cached_tools
 
+
+_ENGLISH_ONLY_RULE = (
+    "# LANGUAGE RULE — MANDATORY\n\n"
+    "You MUST communicate exclusively in English. All responses, questions, summaries, "
+    "and clinical outputs must be in English. Do not use Portuguese or any other language."
+)
+
+LANGUAGE_RULES = {
+    "en": _ENGLISH_ONLY_RULE,
+    "pt-BR": (
+        "# REGRA DE IDIOMA — OBRIGATÓRIO\n\n"
+        "Você DEVE se comunicar EXCLUSIVAMENTE em Português do Brasil. Todas as respostas, "
+        "perguntas, resumos e saídas clínicas devem estar em Português do Brasil. Não use "
+        "inglês ou qualquer outro idioma. Cumprimente o paciente pelo nome e conduza toda "
+        "a triagem em português de forma natural e acolhedora."
+    ),
+    "auto": (
+        "# LANGUAGE RULE — MANDATORY\n\n"
+        "Detect the language used by the patient. If they write or speak Portuguese (pt-BR), "
+        "respond exclusively in Brazilian Portuguese. If they use English, respond exclusively "
+        "in English. Mirror the patient's language consistently throughout the conversation. "
+        "Never mix languages in the same response."
+    ),
+}
+
+_VOICE_MODE_ADDENDUM = (
+    "\n\n---\n\n"
+    "# VOICE MODE — ACTIVE\n\n"
+    "You are operating through a voice interface (ElevenLabs). Adapt your communication:\n"
+    "- Maximum 3 sentences per response\n"
+    "- No markdown: no **, no ###, no bullet points, no code blocks\n"
+    "- Natural spoken language, as in a phone call\n"
+    "- Deliver the clinical summary as spoken paragraphs, not formatted lists"
+)
+
 SYSTEM_PROMPT = """\
 # ROLE & CORE OBJECTIVE
 You are the "Pre-Consultation Triage Agent", an autonomous agent specialized in intelligent clinical triage that operates ON FHIR data. Your objective is to prepare the consultation BEFORE the patient speaks with the healthcare professional.
@@ -297,6 +332,15 @@ When concluding the triage, present the summary in the following format:
 """
 
 
+def get_system_prompt(language: str = "en", voice_mode: bool = False) -> str:
+    """Build the system prompt with the given language and voice mode settings."""
+    lang_rule = LANGUAGE_RULES.get(language, LANGUAGE_RULES["en"])
+    prompt = SYSTEM_PROMPT.replace(_ENGLISH_ONLY_RULE, lang_rule)
+    if voice_mode:
+        prompt += _VOICE_MODE_ADDENDUM
+    return prompt
+
+
 def get_mcp_config():
     return {
         "fhir_server": {
@@ -314,7 +358,7 @@ def get_mcp_config():
     }
 
 
-async def create_triage_agent():
+async def create_triage_agent(language: str = "en", voice_mode: bool = False):
     client = MultiServerMCPClient(get_mcp_config())
 
     all_tools = await client.get_tools()
@@ -337,7 +381,7 @@ async def create_triage_agent():
     agent = create_agent(
         model,
         all_tools,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=get_system_prompt(language, voice_mode),
     )
 
     return agent, client

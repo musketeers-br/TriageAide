@@ -7,3 +7,7 @@ fastmcp
 python-dotenv
 requests
 gradio
+fastapi
+uvicorn[standard]
+httpx
+elevenlabs
