@@ -28,7 +28,7 @@
     },
     "tts": {
       "model_id": "eleven_flash_v2_5",
-      "voice_id": "KHmfNHtEjHhLK9eER20w",
+      "voice_id": "ORgG8rwdAiMYRug8RJwR",
       "supported_voices": [],
       "expressive_mode": false,
       "suggested_audio_tags": [],
@@ -120,7 +120,7 @@
         "native_mcp_server_ids": [],
         "knowledge_base": [],
         "custom_llm": {
-          "url": "https://dark-ways-itch.loca.lt/v1",
+          "url": "https://sage-baseball-mounts-mandate.trycloudflare.com/v1",
           "model_id": null,
           "api_key": {
             "secret_id": "4dGxGLB1vBRIjeXC2ENH"
@@ -157,7 +157,7 @@
   },
   "metadata": {
     "created_at_unix_secs": 1780453783,
-    "updated_at_unix_secs": 1780545669
+    "updated_at_unix_secs": 1780603768
   },
   "platform_settings": {
     "evaluation": {
@@ -449,7 +449,7 @@
     "access_source": "creator"
   },
   "tags": [],
-  "version_id": "agtvrsn_4001kt8cnjd8fbzt8sq9fn6azbwr",
+  "version_id": "agtvrsn_7301kta42kz3ey8bmhrbp0kna25a",
   "branch_id": "agtbrch_4601kt5n1ed7fhmap35be6x7z3pe",
   "main_branch_id": "agtbrch_4601kt5n1ed7fhmap35be6x7z3pe",
   "coaching_settings": null,
