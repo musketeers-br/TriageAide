@@ -1,193 +1,196 @@
-# 🩺 Cenário Refinado — Agente de Triagem Pré-Consulta (FHIR-First)
+# Refined Scenario — Pre-Consultation Triage Agent (FHIR-First)
 
-## 🎯 Ideia central corrigida
+## Core Idea
 
-O agente NÃO começa perguntando tudo do zero.
+The agent does NOT start by asking everything from scratch.
 
-Ele primeiro:
+It first:
 
-✅ consulta o **FHIR Server**
-✅ entende o histórico do paciente
-✅ depois conduz uma triagem inteligente personalizada
+- queries the **FHIR Server**
+- understands the patient's history
+- then conducts personalized intelligent triage
 
-Isso mostra:
+This demonstrates:
 
-* interoperabilidade real
-* uso correto do FHIR
-* inteligência contextual do agente
-
-👉 Pontua MUITO mais no concurso.
+- real interoperability
+- correct FHIR usage
+- contextual intelligence of the agent
 
 ---
 
-# 🧠 Novo Fluxo do Cenário
+# New Scenario Flow
 
-## 👩 Paciente
+## Patient
 
-Maria Silva — 58 anos
-Consulta marcada para amanhã.
-
----
-
-## 🔎 Etapa 1 — AI Agent consulta FHIR (ANTES da conversa)
-
-O agente acessa o **InterSystems IRIS for Health FHIR Server**.
-
-Busca automaticamente:
-
-### Recursos FHIR recuperados
-
-* `Patient`
-* `Condition`
-* `MedicationRequest`
-* `Observation`
-* `AllergyIntolerance`
-* `Encounter` anteriores
-
-Exemplo encontrado:
-
-* Diabetes tipo 2
-* Hipertensão
-* HbA1c elevada
-* Uso de Metformina
-* Última consulta há 8 meses
+Maria Silva — 58 years old
+Appointment scheduled for tomorrow.
 
 ---
 
-## ⭐ O insight importante
+## Step 1 — AI Agent queries FHIR (BEFORE the conversation)
 
-Agora o agente **já conhece o paciente**.
+The agent accesses the **InterSystems IRIS for Health FHIR Server**.
 
-Ele não faz perguntas genéricas.
+Automatically retrieves:
 
-Ele faz perguntas clínicas inteligentes.
+### FHIR Resources Retrieved
 
----
+- `Patient`
+- `Condition`
+- `MedicationRequest`
+- `Observation`
+- `AllergyIntolerance`
+- `Encounter` (previous)
 
-## 🎤 Etapa 2 — Triagem Contextual Inteligente
+Example found:
 
-Em vez de:
-
-> “Você tem alguma doença?”
-
-O agente pergunta:
-
-✅ “Maria, notei que você tem diabetes. Seu açúcar anda controlado?”
-✅ “Você teve falta de ar recentemente?”
-✅ “Mudou alguma medicação?”
-
-Isso demonstra:
-
-👉 **AI Agent operando SOBRE FHIR**, não apenas usando IA.
+- Type 2 Diabetes
+- Hypertension
+- Elevated HbA1c
+- Metformin use
+- Last visit 8 months ago
 
 ---
 
-## 🧬 Etapa 3 — Atualização FHIR (Bidirectional)
+## The Important Insight
 
-Após a conversa:
+Now the agent **already knows the patient**.
 
-O agente **não cria tudo do zero**.
+It doesn't ask generic questions.
 
-Ele:
-
-* complementa histórico existente
-* adiciona novas observações
-
-### Recursos atualizados
-
-* `Observation` → fadiga recente
-* `QuestionnaireResponse` → triagem
-* `ClinicalImpression` → avaliação pré-consulta
-* `Encounter` → preparado para atendimento
-
-FHIR vira **memória clínica viva**.
+It asks intelligent clinical questions.
 
 ---
 
-## ⚠️ Etapa 4 — Clinical Risk Reasoning
+## Step 2 — Contextual Intelligent Triage
 
-O agente cruza:
+Instead of:
 
-FHIR histórico + sintomas novos
+> "Do you have any diseases?"
+
+The agent asks:
+
+- "Maria, I noticed you have diabetes. Is your sugar under control?"
+- "Have you had shortness of breath recently?"
+- "Have you changed any medication?"
+
+This demonstrates:
+
+> **AI Agent operating ON FHIR**, not just using AI.
+
+---
+
+## Step 3 — FHIR Update (Bidirectional)
+
+After the conversation:
+
+The agent **doesn't create everything from scratch**.
+
+It:
+
+- complements existing history
+- adds new observations
+
+### Updated Resources
+
+- `Observation` → recent fatigue
+- `QuestionnaireResponse` → triage
+- `Encounter` → prepared for consultation
+- `Flag` → clinical alert
+- `Task` → follow-up task
+
+FHIR becomes a **living clinical memory**.
+
+---
+
+## Step 4 — Clinical Risk Reasoning
+
+The agent crosses:
+
+FHIR history + new symptoms
 
 ```
-Diabetes + dispneia recente + ausência de acompanhamento
-→ risco cardiovascular elevado
+Diabetes + recent dyspnea + lack of follow-up
+→ elevated cardiovascular risk
 ```
 
-Cria:
+Creates:
 
-* `Flag`
-* `Task`
-* prioridade alta de atendimento
-
----
-
-## 👨‍⚕️ Etapa 5 — Médico abre o prontuário
-
-O médico vê:
-
-✅ histórico já consolidado
-✅ novos sintomas destacados
-✅ resumo clínico automático
-✅ prioridade sugerida
+- `Flag`
+- `Task`
+- high care priority
 
 ---
 
-# 🏗️ Arquitetura correta para o concurso
+## Step 5 — Physician opens the patient record
+
+The physician sees:
+
+- already consolidated history
+- new symptoms highlighted
+- automatic clinical summary
+- suggested priority
+
+---
+
+# Correct Architecture for the Contest
 
 ```
-FHIR Server (IRIS for Health)
-        ↑
-FHIR Query Agent   ← ⭐ começa aqui
-        ↓
-Triage Conversation Agent
-        ↓
-Clinical Reasoning Agent
-        ↓
-FHIR Update Agent
-        ↓
-Clinical Summary
+FHIR Server (IRIS for Health)               ← iris container
+|
++-- fhir_server.py (MCP :8000) — 12 FHIR CRUD tools
++-- triage_server.py (MCP :8001) — 5 contextual triage tools
++-- clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
+|
++-- LangChain Agent (agent.py / cli.py / app.py)
+    system_prompt with 5 mandatory steps
+    responds in English
+|
++-- entrypoint.sh — container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
 ```
 
----
-
-# 🏆 Por que essa versão é MUITO melhor
-
-Você passa de:
-
-❌ chatbot que gera FHIR
-
-para:
-
-✅ **AI Agent interoperável que raciocina sobre dados clínicos existentes**
-
-Isso é exatamente o futuro que a InterSystems promove.
+Two independent Docker services on a shared `fhir-net` bridge network:
+- **iris** — IRIS for Health FHIR server
+- **triage** — Python app (MCP servers + agent + Gradio UI with trace panel)
 
 ---
 
-# 💡 Frase perfeita para o submission
+# Why This Version is Much Better
 
-Use algo assim:
+You go from:
 
-> “The agent first retrieves patient history from a FHIR server, builds contextual clinical understanding, and performs an adaptive pre-consultation triage that enriches and updates the longitudinal patient record.”
+- chatbot that generates FHIR
 
-Juiz lê isso → entende maturidade técnica imediatamente.
+to:
+
+- **Interoperable AI Agent that reasons over existing clinical data**
+
+This is exactly the future that InterSystems promotes.
 
 ---
 
-# ⭐ Upgrade que quase ninguém vai fazer (mas você deveria)
+# Perfect Submission Phrase
 
-Adicionar:
+Use something like:
 
-## 🧠 Longitudinal Patient Understanding
+> "The agent first retrieves patient history from a FHIR server, builds contextual clinical understanding, and performs an adaptive pre-consultation triage that enriches and updates the longitudinal patient record."
 
-O agente mostra:
+A judge reads this → immediately understands technical maturity.
 
-> “Last visit 8 months ago — follow-up overdue.”
+---
 
-🔥 Isso demonstra:
+# Upgrade That Almost Nobody Will Make (But You Should)
 
-* continuidade do cuidado
-* valor clínico real
-* uso avançado de FHIR timeline
+Add:
+
+## Longitudinal Patient Understanding
+
+The agent shows:
+
+> "Last visit 8 months ago — follow-up overdue."
+
+This demonstrates:
+
+- care continuity
+- real clinical value
+- advanced FHIR timeline usage

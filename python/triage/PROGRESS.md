@@ -6,7 +6,7 @@
 
 - Defined the FHIR-First scenario: agent queries history BEFORE talking to the patient
 - Documented in `doc/scenario1.md` (5-step flow) and `doc/app-description.md` (concept)
-- Architectural decision: 3 MCP servers (FHIR, Triage, Clinical Reasoning) + agente LangChain + Gradio UI
+- Architectural decision: 3 MCP servers (FHIR, Triage, Clinical Reasoning) + LangChain agent + Gradio UI
 - Stack decision: FastMCP (streamable-http), langchain-mcp-adapters, OpenAI gpt-4o-mini, Gradio
 - Language decision: agent responds in English
 - Deployment decision: MCP servers run inside the Docker container (not externally)
@@ -14,12 +14,14 @@
 
 ### Phase 2: MCP Servers Implementation
 
-- **fhir_server.py** (port 8000): 11 FHIR CRUD tools implemented
-- 6 read tools: get_patient, get_patient_conditions, get_patient_medications, get_patient_observations, get_patient_allergies, get_patient_encounters
+- **fhir_server.py** (port 8000): 12 FHIR CRUD tools implemented
+- 7 read tools: search_patients, get_patient, get_patient_conditions, get_patient_medications, get_patient_observations, get_patient_allergies, get_patient_encounters
 - 5 write tools: create_observation, create_condition, create_questionnaire_response, create_encounter, create_flag_and_task
 - Critical discovery: IRIS FHIR Server returns HTTP 201 with empty body on POSTs. The created resource ID is in the header `Location` in the format `http://host/fhir/r4/ResourceType/ID/_history/1`. Fix implemented in `_fhir_post()`.
-- **triage_server.py** (port 8001): 4 tools implemented
+- **triage_server.py** (port 8001): 5 tools implemented
 - `build_contextual_questions`: generates questions based on FHIR history (not generic)
+- `get_next_triage_question`: returns the next triage question (one at a time) based on history and covered topics
+- `get_all_triage_topics`: lists all triage topics for a patient context
 - `parse_symptoms`: extracts symptoms, duration, severity from patient text
 - `check_red_flags`: cross-references symptoms with existing conditions to identify warning signs
 - `build_questionnaire_response_data`: builds structured FHIR QuestionnaireResponse
@@ -49,12 +51,12 @@
 - Features: `load` (loads patients), `clean` (removes patients with tag `triage-seed`), `list` (lists loaded patients)
 - Patients tagged with `triage-seed` to facilitate identification and cleanup
 
-### Phase 5: Docker Infrastructure
+### Phase 5: Docker Infrastructure (Single Container)
 
 - **Dockerfile**: added line `pip3 install requests python-dotenv fastmcp langchain langchain-mcp-adapters langchain-openai gradio`
 - **docker-compose.yml**: ports added 8000, 8001, 8002, 7860; custom entrypoint
-- **custom-entrypoint.sh**: wrapper that starts MCP servers in background before IRIS entrypoint
-- **start_mcp_servers.sh**: script that (1) reads OPENAI_API_KEY from .env, (2) starts 3 MCP servers, (3) waits for readiness, (4) loads seed data automatically if not present
+- **custom-entrypoint.sh**: wrapper that started MCP servers in background before IRIS entrypoint
+- **start_mcp_servers.sh**: script that (1) read OPENAI_API_KEY from .env, (2) started 3 MCP servers, (3) waited for readiness, (4) loaded seed data automatically if not present
 - **start_servers.sh** (inside python/triage): manual version for debugging, start MCP servers + Gradio in foreground
 
 ### Phase 6: End-to-End Test
@@ -67,7 +69,44 @@
 - **Bug: MCP sessions closed after `_get_agent()`** — The `async with _client.session(...)` pattern loaded tools inside a context manager which closed MCP sessions on return. When the agent tried to call a tool, the session was already closed. Solution: use `_client.get_tools()` which creates sessions per call, instead of `load_mcp_tools(session)` inside context manager.
 - **Bug: Agent called `get_patient("Maria Silva")` instead of ID** — The LLM didn't know it needed the numeric ID. Solution: added `search_patients(name)` tool to fhir_server.py with multi-strategy search (family, given, name).
 - **Bug: IRIS FHIR `name` param doesn't support full name** — `?name=Maria Silva` returns 0 results. `?family=Silva` or `?given=Maria` works. Solution: `search_patients` tries multiple strategies (family, given, partial name).
+- Added `get_next_triage_question` and `get_all_triage_topics` tools to triage_server.py (5 tools total, up from 4)
 - Validation of the complete 5-step flow
+
+### Phase 8: Translation to English
+
+- All code comments, docstrings, variable names, and documentation translated from Portuguese to English
+- Updated `PLAN.md`, `PROGRESS.md`, `README.md`
+- Agent system prompt updated to respond in English (was Portuguese)
+- Note: `doc/app-description.md` and `doc/scenario1.md` were initially left in Portuguese, later translated
+
+### Phase 9: Separate Docker Services
+
+- Split IRIS FHIR server and triage app into **two independent Docker services** on a shared `fhir-net` bridge network
+- **iris service**: IRIS for Health only (ports 32782-32784)
+- **triage service**: Python 3.12-slim with MCP servers + agent + Gradio (ports 8000-8002, 7860)
+- Created `python/triage/Dockerfile` for the triage service
+- Created `python/triage/entrypoint.sh` — container entrypoint that: waits for FHIR server, loads seed data, starts MCP servers, starts Gradio
+- Deleted obsolete `custom-entrypoint.sh` and `start_mcp_servers.sh` (were iris-container scripts)
+- Updated `docker-compose.yml` with two services, `env_file`, and `fhir-net` network
+- Updated `.env.example` with `FHIR_USER`, `FHIR_PASS`, `LANGSMITH_*` variables
+- Triage container uses `http://iris:52773/fhir/r4` (container-internal URL via Docker DNS)
+
+### Phase 10: LangSmith Observability
+
+- Added LangSmith tracing support for agent inspection
+- Added `langsmith` to `requirements.txt`
+- Updated `.env.example` with `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING`
+- Updated `entrypoint.sh` to conditionally enable LangSmith when `LANGSMITH_API_KEY` is set
+- Added LLM caching via SQLite (`LLM_CACHE=sqlite`) to reduce costs during development
+- Updated `agent.py` with cache prompt normalization for consistent cache hits
+
+### Phase 11: Gradio Trace Panel
+
+- Added agent observability to the Gradio UI with a real-time trace panel
+- Each tool call is mapped to one of the 5 workflow steps with visual indicators (step labels and icons)
+- Tool results are summarized for concise display (e.g., "3 condition(s) retrieved", "HIGH (score 7)")
+- Expanded `app.py` significantly (~660 lines) with step mapping, tool icons, result summarization, and trace rendering
+- Uses `gr.ChatMessage` with metadata for structured tool call display
 
 ---
 
@@ -95,13 +134,13 @@ Transactional FHIR Bundles with `urn:uuid:` references assume that the server re
 
 If an environment variable is already defined in the shell (via `export`), `load_dotenv()` does not override it. This causes confusion when `start_servers.sh` does `export FHIR_BASE_URL=http://localhost:52773/fhir/r4` (container internal port) but the `.env` has `http://localhost:32783/fhir/r4` (host port).
 
-**Solution**: `start_servers.sh` and `start_mcp_servers.sh` export `FHIR_BASE_URL` with the internal port (52773) explicitly before running the servers. The `.env` has the host port (32783) for use when running outside the container.
+**Solution**: `start_servers.sh` and `entrypoint.sh` export `FHIR_BASE_URL` with the internal port (52773) explicitly before running the servers. The `.env` has the host port (32783) for use when running outside the container.
 
 ### 4. Pip installs in a running container are lost on restart
 
 Any `pip install` done manually inside the container is lost when the container is recreated.
 
-**Solution**: All triage dependencies were added to the Dockerfile in the line `pip3 install ...`. For new dependencies, update Dockerfile + requirements.txt and rebuild.
+**Solution**: All triage dependencies are added to `python/triage/Dockerfile`. For new dependencies, update Dockerfile + requirements.txt and rebuild.
 
 ### 5. Gradio 6.x: API changes
 
@@ -123,9 +162,15 @@ Using `async with _client.session("server")` to load tools is dangerous: MCP ses
 
 ### 8. IRIS FHIR `name` search param doesn't support full name
 
-The parameter `?name=Maria Silva` returns 0 results in the IRIS FHIR Server. Search works only with name parts: `?family=Silva` or `?given=Maria`.
+The parameter `?name=Maria Silva` returns 0 results in the IRIS FHIR Server. Search works only with name parts: `?family=Silva` or `?given=Mary`.
 
 **Solution**: `search_patients()` tries multiple strategies: (1) `family` + `given` separately, (2) `name` with each part individually. Stops at the first one that returns results.
+
+### 9. Container-internal vs host URLs for FHIR
+
+From the triage container, use `http://iris:52773/fhir/r4` (Docker DNS resolves `iris` to the FHIR container). From the host, use `http://localhost:32783/fhir/r4`.
+
+**Solution**: `entrypoint.sh` defaults to `http://iris:52773/fhir/r4`. `docker-compose.yml` sets `FHIR_BASE_URL=http://iris:52773/fhir/r4` as environment variable. `.env.example` documents both options.
 
 ---
 
@@ -136,11 +181,13 @@ The parameter `?name=Maria Silva` returns 0 results in the IRIS FHIR Server. Sea
 | 3 separate MCP servers | 1 monolithic MCP server | Separation of responsibilities: FHIR (data), Triage (triage logic), Clinical Reasoning (reasoning). Facilitates maintenance and extension. |
 | FastMCP streamable-http | stdio transport | Streamable-http allows services to run on separate ports and be accessible via HTTP, compatible with containerization. |
 | gpt-4o-mini | gpt-4o, gpt-3.5-turbo | Cost-benefit: gpt-4o-mini is cheap and competent for triage. gpt-4o would be overkill for the scope. |
-| MCP servers inside the container | MCP servers outside the container | Simplifies deployment: everything starts together with `docker compose up`. Does not require external network configuration for the MCP servers. |
+| Separate Docker services (iris + triage) | Single container (iris + triage) | Clean separation of concerns. Triage app is a Python service independent of IRIS. Simplifies rebuilds, scaling, and debugging. |
+| LangSmith tracing (optional) | Custom logging | LangSmith provides rich agent trace visualization without custom code. Optional — no impact when key is absent. |
 | LangChain + langchain-mcp-adapters | Custom MCP client | langchain-mcp-adapters already solves MCP → LangChain tools integration. Avoids reinventing the wheel. |
 | Gradio | Streamlit, Flask | Gradio ChatInterface is the simplest for prototyping a chat. Streamlit would require more code for the same result. |
 | seed_data.py with `triage-seed` tag | Manual resource removal | Tag allows automatic `clean`: removes all resources with the tag, without needing to track IDs. |
 | System prompt embedded in code | External prompt in file | Simplifies deployment (1 fewer file). If it needs to be configurable, extract to file later. |
+| LLM SQLite caching | No caching | Reduces OpenAI API costs during development. Cache keys are normalized to hit across identical invocations. |
 
 ---
 
@@ -152,17 +199,21 @@ The parameter `?name=Maria Silva` returns 0 results in the IRIS FHIR Server. Sea
 - [x] Agent core (`agent.py`), CLI (`cli.py`) and Web UI (`app.py`) functional
 - [x] 4 test patients with complete FHIR bundles
 - [x] Seed data with load/clean/list
-- [x] Complete Docker infrastructure (Dockerfile, docker-compose, custom entrypoint)
-- [x] Auto-startup of MCP servers + seed data in container
+- [x] Complete Docker infrastructure (2 services: iris + triage, Docker Compose)
+- [x] Auto-startup of MCP servers + seed data via `entrypoint.sh`
 - [x] End-to-end test with Maria Silva
 - [x] Documentation (README, PROGRESS, updated PLAN)
 - [x] Test Gradio UI externally (host port 7860)
 - [x] Test with all 4 patients (Joao, Ana, Roberto)
+- [x] Patient search by name (`search_patients` tool)
+- [x] Separate Docker services (iris + triage)
+- [x] LangSmith observability (optional)
+- [x] Gradio trace panel for real-time agent step progress
+- [x] Translation to English (code + docs)
 
 ### Pending / Needs Attention
 
 - [ ] Agent doesn't always create all expected FHIR resources (Flag, Task, QuestionnaireResponse) — depends on the LLM's decision; may need prompt adjustment
-- [ ] Add tool to search patients by name (currently only works by ID)
 - [ ] Container restart test to validate complete auto-startup pipeline
 
 ### Future Work / Nice-to-have
