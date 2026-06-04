@@ -63,7 +63,7 @@ for port in 8000 8001 8002; do
 done
 
 echo "Starting Voice Bridge on port 8003..."
-uvicorn voice_bridge:app --host 0.0.0.0 --port 8003 --log-level info > /tmp/voice_bridge.log 2>&1 &
+uvicorn voice_bridge:app --host 0.0.0.0 --port 8003 --log-level info --no-access-log > /tmp/voice_bridge.log 2>&1 &
 VOICE_PID=$!
 
 cleanup() {

@@ -102,6 +102,7 @@ FHIR_BASE_URL=http://iris:52773/fhir/r4 OPENAI_API_KEY=sk-... python3 app.py
 | 8001 | 8001 | Triage MCP Server |
 | 8002 | 8002 | Clinical Reasoning MCP Server |
 | 7860 | 7860 | Gradio Web UI |
+| 8003 | 8003 | Voice Bridge (ElevenLabs OpenAI-compatible API) |
 
 ## Test Patients
 
@@ -169,8 +170,11 @@ triage_server.py            # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
 agent.py                    # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
-app.py                      # Gradio chat UI with trace panel — Web
-start_servers.sh            # Script to start the 3 MCP servers + Gradio (manual)
+app.py # Gradio chat UI with trace panel — Web
+voice_bridge.py # Voice Bridge — OpenAI-compatible API for ElevenLabs (port 8003)
+voice_session.py # Voice session store (language detection, auto-eviction)
+tunnel.sh # SSH tunnel script (localhost.run) for public Voice Bridge access
+start_servers.sh # Script to start the 3 MCP servers + Gradio (manual)
 PLAN.md                     # Architecture plan and tools
 PROGRESS.md                 # Progress history, discoveries, and decisions
 README.md                   # This file
@@ -229,6 +233,184 @@ To enable [LangSmith](https://smith.langchain.com/) tracing for detailed agent i
 2. Set `LANGSMITH_TRACING=true` (enabled by default when the key is present)
 3. Set `LANGSMITH_PROJECT=triage-aide` (or your preferred project name)
 
+## Voice Integration (ElevenLabs)
+
+The triage agent supports voice interaction via [ElevenLabs Conversational AI](https://elevenlabs.io/conversational-ai). The **Voice Bridge** (`voice_bridge.py`) exposes an OpenAI-compatible `/v1/chat/completions` endpoint that ElevenLabs calls as a **Custom LLM**.
+
+### Architecture
+
+```
+Browser (mic) → ElevenLabs (STT) → Voice Bridge (:8003) → Triage Agent → SSE chunks → ElevenLabs (TTS) → Browser (speaker)
+```
+
+1. The user speaks in the browser; ElevenLabs performs STT and sends the transcribed text to the Voice Bridge
+2. The Voice Bridge runs the triage agent (`agent.ainvoke`) and streams the response as SSE chunks
+3. ElevenLabs receives the text chunks and performs real-time TTS back to the browser
+
+### Voice Bridge Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/v1/chat/completions` | POST | OpenAI-compatible chat completions (SSE streaming) |
+| `/health` | GET | Health check |
+| `/widget` | GET | Standalone HTML page with ElevenLabs widget (for iframe embed) |
+
+### Testing the Voice Bridge
+
+Replace `<VOICE_BRIDGE_SECRET>` with the value from your `.env` file.
+
+**Local (direct to container):**
+
+```bash
+# Streaming response
+curl -X POST http://localhost:8003/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
+
+# Non-streaming (full JSON response)
+curl -X POST http://localhost:8003/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":false}'
+```
+
+**Via tunnel (ElevenLabs calls this URL):**
+
+```bash
+curl -X POST https://<your-tunnel-url>/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
+```
+
+### Configuration
+
+Add these variables to your `.env`:
+
+```bash
+# Voice Bridge secret — generate with: openssl rand -hex 32
+VOICE_BRIDGE_SECRET=015bbe1fd66b576478fab7033eb83bd654afa7017e167a1f0fb7036c2a52f83d
+
+# ElevenLabs agent ID (from Conversational AI dashboard)
+ELEVENLABS_AGENT_ID=agent_0801kt1tp3a7ft5twydwszz4k4v7
+
+# ElevenLabs widget embed ID (optional, defaults to ELEVENLABS_AGENT_ID)
+ELEVENLABS_WIDGET_ID=agent_0801kt1tp3a7ft5twydwszz4k4v7
+
+# Public URL of the Voice Bridge (update after opening tunnel)
+VOICE_BRIDGE_URL=http://localhost:8003
+```
+
+> **Important:** `VOICE_BRIDGE_SECRET` must be set **only** in `.env`. Do NOT set it in the `docker-compose.yml` `environment:` section — `environment:` takes precedence over `env_file:` and silently overrides the `.env` value, which causes 401 errors if the values differ.
+
+### ElevenLabs Dashboard Setup
+
+1. Go to **Conversational AI → Create Agent** in the ElevenLabs dashboard
+2. Under **Configure → Agent**, set **LLM** to **Custom LLM**
+3. Set **LLM URL**: `https://<your-tunnel-url>/v1/chat/completions`
+4. Set **Authorization**: `Bearer <your VOICE_BRIDGE_SECRET>`
+5. Select a Brazilian Portuguese or English voice and enable **language auto-detection**
+6. Copy the **Agent ID** from the URL and set it as `ELEVENLABS_AGENT_ID` in `.env`
+
+### Gradio Voice Tab
+
+The Gradio UI includes a **Voice** tab with the ElevenLabs conversational widget. Enter your Agent ID and click **Load Widget** to start a voice session. If the widget doesn't render, expand the **"Widget not showing?"** section to use the standalone iframe version.
+
+The agent automatically detects Portuguese (`pt-BR`) or English (`en`) from the user's first message and responds in the same language.
+
+### Session Management
+
+- Each conversation is tracked by a session ID (from ElevenLabs `X-EL-Conversation-Id` header)
+- Sessions auto-expire after 30 minutes of inactivity
+- Markdown is stripped from agent responses for clean TTS output
+- Voice mode uses shorter, conversational responses (max 3 sentences, no markdown)
+
+## Public Tunnel (localtunnel)
+
+ElevenLabs needs a publicly accessible HTTPS URL to reach the Voice Bridge. The project includes a `start_tunnel.sh` script at the repo root that creates a stable localtunnel with a fixed subdomain.
+
+### Using `start_tunnel.sh`
+
+```bash
+# From the project root (host machine, not inside the container)
+./start_tunnel.sh
+```
+
+The script:
+- Uses [localtunnel](https://github.com/localtunnel/localtunnel) (`npx localtunnel`) to expose port 8003
+- Fixes the subdomain to `dark-ways-itch` so the URL is always `https://dark-ways-itch.loca.lt`
+- Automatically retries if the subdomain is temporarily unavailable (waits 15s between attempts)
+- Logs output to `tunnel.log`
+
+**Prerequisites:** Node.js + npm (for `npx localtunnel`)
+
+### Manual Command
+
+```bash
+npx localtunnel --port 8003 --subdomain dark-ways-itch
+```
+
+Or without a fixed subdomain (gets a random URL each time):
+
+```bash
+npx localtunnel --port 8003
+```
+
+### After starting the tunnel
+
+1. Update your `.env`: `VOICE_BRIDGE_URL=https://dark-ways-itch.loca.lt`
+2. In the ElevenLabs dashboard, set the Custom LLM URL to `https://dark-ways-itch.loca.lt/v1/chat/completions`
+3. Verify: `curl https://dark-ways-itch.loca.lt/health`
+
+> **Note:** The first request to a localtunnel URL may show an intermediate page asking you to click "Continue". Append `/health` to verify the tunnel is active.
+
+### Alternative tunnel methods
+
+- **ngrok**: `ngrok http 8003` — provides a random HTTPS URL (free plan). For persistent URLs, use [ngrok's static domains](https://ngrok.com/blog-post/free-static-domains-ngrok-users).
+- **localhost.run**: `ssh -R 80:localhost:8003 localhost.run` — no account required, but URLs change each session.
+- **Cloudflare Tunnel**: For production, use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for a stable URL.
+
+## ElevenLabs Agent Configuration (`11labs/myagent.json`)
+
+The `11labs/myagent.json` file is an exported configuration of the ElevenLabs Conversational AI agent. It contains the full agent setup for reference and re-import.
+
+### Key fields in the JSON
+
+| Field | Value | Description |
+|---|---|---|
+| `agent_id` | `agent_7001kt5n1cv6fj687wvbaxy81r0y` | Matches `ELEVENLABS_AGENT_ID` in `.env` |
+| `agent.first_message` | `"Olá! Como posso ajudar?"` | Initial greeting spoken when the conversation starts |
+| `agent.language` | `"pt-br"` | Default language (agent also auto-detects) |
+| `prompt.llm` | `"custom-llm"` | Tells ElevenLabs to call the Voice Bridge instead of a built-in model |
+| `custom_llm.url` | `"https://dark-ways-itch.loca.lt/v1"` | Base URL of the Voice Bridge (update if tunnel URL changes) |
+| `custom_llm.api_type` | `"chat_completions"` | Appends `/chat/completions` to the base URL |
+| `custom_llm.request_headers.Authorization` | `secret_id` | References the `VOICE_BRIDGE_SECRET` stored in ElevenLabs secrets |
+| `tts.model_id` | `"eleven_flash_v2_5"` | TTS model — low latency |
+| `tts.voice_id` | `"KHmfNHtEjHhLK9eER20w"` | Selected Portuguese-compatible voice |
+| `turn.turn_timeout` | `7` | Seconds of silence before the agent responds |
+| `conversation.max_duration_seconds` | `600` | Maximum conversation length (10 minutes) |
+| `timezone` | `"America/Sao_Paulo"` | Agent timezone |
+
+### How to import/update the agent
+
+1. Go to [elevenlabs.io/conversational-ai](https://elevenlabs.io/conversational-ai)
+2. Click **Create Agent** (or select an existing one)
+3. Use the **Import/Export** feature to load `11labs/myagent.json`
+4. After import, update the **Custom LLM URL** to match your current tunnel URL
+5. Ensure the **Authorization** secret matches your `VOICE_BRIDGE_SECRET`
+
+### Custom LLM URL format
+
+The `custom_llm.url` field is the **base URL** — ElevenLabs appends `/chat/completions` automatically (based on `api_type: "chat_completions"`). So:
+
+| `custom_llm.url` | Actual endpoint called |
+|---|---|
+| `https://dark-ways-itch.loca.lt/v1` | `https://dark-ways-itch.loca.lt/v1/chat/completions` |
+| `https://abc123.ngrok-free.app/v1` | `https://abc123.ngrok-free.app/v1/chat/completions` |
+
+> **Important:** If you change the tunnel URL, update both `custom_llm.url` in the ElevenLabs dashboard and `VOICE_BRIDGE_URL` in `.env`.
+
 ## Troubleshooting
 
 ### Check if MCP servers are running
@@ -237,6 +419,12 @@ To enable [LangSmith](https://smith.langchain.com/) tracing for detailed agent i
 docker compose exec triage bash -c 'cat /tmp/fhir_server.log'
 docker compose exec triage bash -c 'cat /tmp/triage_server.log'
 docker compose exec triage bash -c 'cat /tmp/cr_server.log'
+docker compose exec triage bash -c 'cat /tmp/voice_bridge.log'
+```
+
+For live logging with structured output:
+```bash
+docker compose exec triage bash -c 'tail -f /tmp/voice_bridge.log'
 ```
 
 ### Restart MCP servers manually
@@ -265,6 +453,27 @@ Verify that the `python/triage/.env` file exists and contains the `OPENAI_API_KE
 ### Pip installs are lost on container restart
 
 Triage dependencies are installed in `python/triage/Dockerfile` (`pip3 install ...`). If you installed something extra manually with pip inside the container, it will be lost on restart. Add new dependencies to `Dockerfile` and `requirements.txt` for persistence.
+
+### Voice Bridge not responding
+
+1. Check if the Voice Bridge process is running: `docker compose exec triage bash -c 'cat /tmp/voice_bridge.log'`
+2. Verify the bridge health endpoint: `curl http://localhost:8003/health`
+3. Ensure `VOICE_BRIDGE_SECRET` matches between `.env` and the ElevenLabs dashboard Authorization header
+4. If using a tunnel, verify the tunnel is active and the URL is correct in the ElevenLabs dashboard
+5. If you get 401 errors, verify the container is using the correct secret (not a default or overridden value):
+
+```bash
+# Check what the container actually sees
+docker compose exec triage bash -c 'echo $VOICE_BRIDGE_SECRET | wc -c'
+# Should be 65 (64 hex chars + newline) if using openssl rand -hex 32
+# If it shows 8, it's using the default "changeme"
+```
+
+### Tunnel URL not working
+
+1. Make sure the Voice Bridge is running on port 8003 before starting the tunnel
+2. Restart the tunnel — `localhost.run` URLs change each session
+3. Update `VOICE_BRIDGE_URL` in `.env` and the ElevenLabs dashboard with the new URL
 
 ## Tech Stack
 

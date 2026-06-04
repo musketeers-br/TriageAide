@@ -49,6 +49,7 @@ docker compose exec triage bash -c 'cd /app && FHIR_BASE_URL=http://iris:52773/f
 docker compose exec triage bash -c 'cat /tmp/fhir_server.log'
 docker compose exec triage bash -c 'cat /tmp/triage_server.log'
 docker compose exec triage bash -c 'cat /tmp/cr_server.log'
+docker compose exec triage bash -c 'cat /tmp/voice_bridge.log'
 
 # Check triage container logs
 docker compose logs triage

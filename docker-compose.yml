@@ -29,26 +29,25 @@ services:
     container_name: triage-app
     depends_on:
       - iris
-    env_file:
-      - ./python/triage/.env
-    environment:
-      - FHIR_BASE_URL=http://iris:52773/fhir/r4
-      - FHIR_USER=_SYSTEM
-      - FHIR_PASS=SYS
-      - VOICE_BRIDGE_SECRET=${VOICE_BRIDGE_SECRET:-changeme}
-      - ELEVENLABS_AGENT_ID=${ELEVENLABS_AGENT_ID:-}
-      - ELEVENLABS_WIDGET_ID=${ELEVENLABS_WIDGET_ID:-}
-      - VOICE_BRIDGE_URL=${VOICE_BRIDGE_URL:-http://localhost:8003}
+  env_file:
+    - ./python/triage/.env
+  environment:
+    - FHIR_BASE_URL=http://iris:52773/fhir/r4
+    - FHIR_USER=_SYSTEM
+    - FHIR_PASS=SYS
+    - ELEVENLABS_AGENT_ID=${ELEVENLABS_AGENT_ID:-}
+    - ELEVENLABS_WIDGET_ID=${ELEVENLABS_WIDGET_ID:-}
+    - VOICE_BRIDGE_URL=${VOICE_BRIDGE_URL:-http://localhost:8003}
     ports:
       - 8000:8000
       - 8001:8001
       - 8002:8002
-      - 7860:7860
       - 8003:8003
+      - 7860:7860
     volumes:
       - ./python/triage:/app
     networks:
-      - fhir-net
+    - fhir-net
 
 networks:
   fhir-net:
