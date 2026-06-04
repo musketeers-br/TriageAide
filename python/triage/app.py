@@ -587,10 +587,16 @@ def main():
                 with gr.Row():
                     gr.Examples(
                         examples=[
-                            "Start triage for patient Maria Silva",
-                            "Triage for patient Joao Santos",
-                            "Patient Ana Costa history",
-                            "Triage for patient Roberto Lima",
+                          "Hi, I'm Maria Silva and I've been feeling really thirsty lately",
+                          "I'm Maria Silva, I've been having headaches and blurred vision",
+                          "Hi, I'm Joao Santos, I've been having chest pain",
+                          "I'm Joao Santos, I've been short of breath and my legs are swollen",
+                          "I'm Roberto Lima, my cough has been getting worse",
+                          "I'm Roberto Lima, I've been feeling sad and having trouble sleeping",
+                          "Hi, I'm Ana Costa, I've been having a fever and feeling tired",
+                          "I'm Ana Costa, I've had a cough for the past week",
+                          "Oi, sou a Maria Silva, ando com muita sede e visão embaçada",
+                          "Olá, sou o Roberto Lima, minha tosse está piorando",
                         ],
                         inputs=msg_input,
                     )
