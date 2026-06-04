@@ -338,31 +338,39 @@ openssl rand -hex 32
 ```
 
 Add this to `python/triage/.env`:
-```
+```bash
 VOICE_BRIDGE_SECRET=a3f7c2d1e8b4a9f6...
 ```
 
+> **Important:** `VOICE_BRIDGE_SECRET` must be set **only** in `python/triage/.env`. Do NOT set it in the `docker-compose.yml` `environment:` section — that overrides the `.env` file value and causes 401 errors. The `.env` file is loaded via `env_file:` in docker-compose and is the single source of truth for this variable.
+
 ### Step 2 — Expose the voice bridge publicly (local development)
 
-ElevenLabs needs to reach your voice bridge over HTTPS. Use [ngrok](https://ngrok.com/):
+ElevenLabs needs to reach your voice bridge over HTTPS. The project includes a `start_tunnel.sh` script at the repo root that creates a stable tunnel with a fixed subdomain.
+
+**Using `start_tunnel.sh` (localtunnel with fixed subdomain):**
+
+```bash
+# From the project root (host machine)
+./start_tunnel.sh
+```
+
+This uses [localtunnel](https://github.com/localtunnel/localtunnel) to expose port 8003 at `https://dark-ways-itch.loca.lt`. The script automatically retries if the subdomain is temporarily unavailable. Requires Node.js + npm.
+
+**Alternative: ngrok**
 
 ```bash
 # Install ngrok if needed: https://ngrok.com/download
 ngrok http 8003
 ```
 
-Note the HTTPS URL shown (e.g., `https://abc123.ngrok-free.app`). Add to `.env`:
-```
-VOICE_BRIDGE_URL=https://abc123.ngrok-free.app
-```
+**After starting the tunnel:**
 
-Verify the bridge is reachable:
-```bash
-curl https://abc123.ngrok-free.app/health
-# Expected: {"status":"ok","service":"triageaide-voice-bridge"}
-```
+1. Update your `.env`: `VOICE_BRIDGE_URL=https://dark-ways-itch.loca.lt` (or your ngrok URL)
+2. In the ElevenLabs dashboard, set the Custom LLM base URL to `https://dark-ways-itch.loca.lt/v1` (ElevenLabs appends `/chat/completions` automatically)
+3. Verify the tunnel: `curl https://<tunnel-url>/health`
 
-> **Production note:** For production deployments, use a static public URL (cloud VM, reverse proxy with TLS) instead of ngrok.
+> **Production note:** For production deployments, use a static public URL (cloud VM, reverse proxy with TLS) instead of a tunnel.
 
 ### Step 3 — Create the ElevenLabs agent
 
@@ -384,6 +392,8 @@ curl https://abc123.ngrok-free.app/health
 
 5. Click **Save** and note the **Agent ID** shown in the URL or settings page
 
+> **Tip:** You can also import the pre-configured agent from `11labs/myagent.json` using the ElevenLabs dashboard Import/Export feature. See [ElevenLabs Agent Configuration Reference](#elevenlabs-agent-configuration-reference) below.
+
 ### Step 4 — Configure the Agent ID in .env
 
 ```bash
@@ -404,11 +414,31 @@ After restart, open **http://localhost:7860** → **🎙️ Voice tab** — you 
 
 **Quick test via curl (no ElevenLabs account needed):**
 
+Replace `<VOICE_BRIDGE_SECRET>` with the value from your `python/triage/.env` file.
+
+**Local (direct to container):**
+
 ```bash
+# Streaming response (same format ElevenLabs uses)
 curl -X POST http://localhost:8003/v1/chat/completions \
-  -H "Authorization: Bearer <your-VOICE_BRIDGE_SECRET>" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
+
+# Non-streaming (full JSON response)
+curl -X POST http://localhost:8003/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
   -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":false}'
+```
+
+**Via tunnel (same URL ElevenLabs calls):**
+
+```bash
+curl -X POST https://<your-tunnel-url>/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
 ```
 
 Expected: JSON response with `choices[0].message.content` containing the agent's first question in Portuguese.
@@ -431,6 +461,36 @@ The agent automatically detects language from the patient's speech:
 - **Portuguese detected** (any pt-BR token like "tenho", "estou", "triagem", "dor"...) → all responses in pt-BR
 - **English detected** → all responses in en-US
 - Language is **sticky per session** — once set, it stays for the entire conversation
+
+### ElevenLabs Agent Configuration Reference
+
+The `11labs/myagent.json` file is an exported configuration of the ElevenLabs Conversational AI agent. It contains the full agent setup for reference, re-import, or version control.
+
+**Key fields:**
+
+| Field | Value | Description |
+|---|---|---|
+| `agent_id` | `agent_7001kt5n1cv6fj687wvbaxy81r0y` | Matches `ELEVENLABS_AGENT_ID` in `.env` |
+| `agent.first_message` | `"Olá! Como posso ajudar?"` | Initial greeting spoken when the conversation starts |
+| `agent.language` | `"pt-br"` | Default language (the Voice Bridge also auto-detects) |
+| `prompt.llm` | `"custom-llm"` | Tells ElevenLabs to call the Voice Bridge instead of a built-in model |
+| `custom_llm.url` | `"https://dark-ways-itch.loca.lt/v1"` | **Base URL** of the Voice Bridge — ElevenLabs appends `/chat/completions` automatically |
+| `custom_llm.api_type` | `"chat_completions"` | Determines the endpoint path appended to the base URL |
+| `custom_llm.request_headers.Authorization` | `secret_id` | References the `VOICE_BRIDGE_SECRET` stored in ElevenLabs secrets vault |
+| `tts.model_id` | `"eleven_flash_v2_5"` | TTS model — optimized for low latency |
+| `tts.voice_id` | `"KHmfNHtEjHhLK9eER20w"` | Selected Portuguese-compatible voice |
+| `turn.turn_timeout` | `7` | Seconds of silence before the agent responds |
+| `conversation.max_duration_seconds` | `600` | Maximum conversation length (10 minutes) |
+| `timezone` | `"America/Sao_Paulo"` | Agent timezone |
+
+**Custom LLM URL format:**
+
+| `custom_llm.url` (base) | Actual endpoint called by ElevenLabs |
+|---|---|
+| `https://dark-ways-itch.loca.lt/v1` | `https://dark-ways-itch.loca.lt/v1/chat/completions` |
+| `https://abc123.ngrok-free.app/v1` | `https://abc123.ngrok-free.app/v1/chat/completions` |
+
+> **Important:** When changing the tunnel URL, update `custom_llm.url` in the ElevenLabs dashboard **and** `VOICE_BRIDGE_URL` in `.env`.
 
 ---
 
@@ -703,11 +763,20 @@ The `VOICE_BRIDGE_SECRET` in your `.env` must match exactly what you configured 
 grep VOICE_BRIDGE_SECRET python/triage/.env
 ```
 
+Also verify the value the container is actually using — if it shows `changeme` or a different value, the `docker-compose.yml` `environment:` section may be overriding `.env`:
+
+```bash
+docker compose exec triage bash -c 'echo $VOICE_BRIDGE_SECRET | wc -c'
+# Should match the length of your secret (64 chars + newline for a hex-32 secret)
+```
+
+The `.env` file must be the **only** source of `VOICE_BRIDGE_SECRET`. Do not duplicate it in the `docker-compose.yml` `environment:` section, because `environment:` takes precedence over `env_file:` and silently overrides the value.
+
 ### ElevenLabs can't reach the voice bridge
 
-- Make sure ngrok is running: `ngrok http 8003`
+- Make sure the tunnel is running: `./start_tunnel.sh` (or `ngrok http 8003`)
+- If using `start_tunnel.sh`, verify the fixed URL: `curl https://dark-ways-itch.loca.lt/health`
 - The ngrok URL changes every restart (free plan). Update `VOICE_BRIDGE_URL` in `.env` and in the ElevenLabs agent configuration.
-- Test the public URL: `curl https://<ngrok-url>/health`
 - For persistent URLs, use [ngrok's static domains](https://ngrok.com/blog-post/free-static-domains-ngrok-users) (free tier: 1 static domain).
 
 ### Agent responds in the wrong language

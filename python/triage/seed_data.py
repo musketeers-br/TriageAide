@@ -68,7 +68,9 @@ def _create_resource(resource_type, resource):
     if resp.status_code in (200, 201):
         location = resp.headers.get("Location", "")
         rid = _extract_id_from_location(location)
-        return rid, None
+        if rid and rid != "?":
+            return rid, None
+        return None, f"Created but could not extract ID from Location header: {location}"
     else:
         return None, f"{resp.status_code}: {resp.text[:200]}"
 
@@ -96,37 +98,38 @@ def load_all():
             resource_type = resource.get("resourceType", "?")
             full_url = entry.get("fullUrl", "")
             if resource_type == "Patient":
-                patient_entries.append((full_url, resource))
+                patient_entries.append((full_url, json.loads(json.dumps(resource))))
             else:
-                other_entries.append((full_url, resource))
+                other_entries.append((full_url, json.loads(json.dumps(resource))))
 
         for full_url, resource in patient_entries:
             resource.setdefault("meta", {})
             resource["meta"].setdefault("tag", [])
-            resource["meta"]["tag"].append(
-                {
-                    "system": "http://hospital.smarthealthit.org/tag",
-                    "code": PATIENT_TAG,
-                }
-            )
+            if not any(t.get("code") == PATIENT_TAG for t in resource["meta"]["tag"]):
+                resource["meta"]["tag"].append(
+                    {
+                        "system": "http://hospital.smarthealthit.org/tag",
+                        "code": PATIENT_TAG,
+                    }
+                )
             rid, err = _create_resource("Patient", resource)
             if rid:
                 name = _extract_name(resource)
-            print(f" Patient/{rid} {name} OK")
-            uuid_map[full_url] = rid
-            total_created += 1
-        else:
-            print(f" Patient ERROR {err}")
+                print(f" Patient/{rid} {name} OK")
+                uuid_map[full_url] = rid
+                total_created += 1
+            else:
+                print(f" Patient ERROR {err}")
 
-    for full_url, resource in other_entries:
-        resolved = _resolve_references(resource, uuid_map)
-        resource_type = resolved.get("resourceType", "?")
-        rid, err = _create_resource(resource_type, resolved)
-        if rid:
-            print(f" {resource_type}/{rid} OK")
-            total_created += 1
-        else:
-            print(f" {resource_type} ERROR {err}")
+        for full_url, resource in other_entries:
+            resolved = _resolve_references(resource, uuid_map)
+            resource_type = resolved.get("resourceType", "?")
+            rid, err = _create_resource(resource_type, resolved)
+            if rid:
+                print(f" {resource_type}/{rid} OK")
+                total_created += 1
+            else:
+                print(f" {resource_type} ERROR {err}")
 
     print(f"\nTotal resources created: {total_created}")
 
@@ -228,7 +231,10 @@ if __name__ == "__main__":
         load_all()
     elif cmd == "clean":
         clean()
+    elif cmd == "reload":
+        clean()
+        load_all()
     elif cmd == "list":
         list_seed_patients()
     else:
-        print(f"Usage: python seed_data.py [load|clean|list]")
+        print(f"Usage: python seed_data.py [load|clean|reload|list]")

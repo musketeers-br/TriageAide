@@ -9,9 +9,11 @@ import os
 import re
 import json
 import uuid
+import logging
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,19 +25,30 @@ from langchain_core.messages import HumanMessage
 from agent import create_triage_agent, extract_ai_response
 from voice_session import VoiceSessionStore, detect_language
 
+logger = logging.getLogger("voice_bridge")
+logger.setLevel(logging.DEBUG)
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter(
+    "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+))
+logger.addHandler(_handler)
+
 _agent = None
 _mcp_client = None
 _store = VoiceSessionStore()
 
 VOICE_BRIDGE_SECRET = os.getenv("VOICE_BRIDGE_SECRET", "changeme")
+logger.info("VOICE_BRIDGE_SECRET loaded (%s)", "default" if VOICE_BRIDGE_SECRET == "changeme" else f"{len(VOICE_BRIDGE_SECRET)} chars")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _agent, _mcp_client
-    print("[VoiceBridge] Initializing triage agent (language=auto, voice_mode=True)...")
-    _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True)
-    print("[VoiceBridge] Agent ready — listening on port 8003.")
+    logger.info("Initializing triage agent (language=auto, voice_mode=True)...")
+    _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True, cache_namespace="voice")
+    logger.info("Agent ready — listening on port 8003.")
     evict_task = asyncio.create_task(_evict_loop())
     yield
     evict_task.cancel()
@@ -54,12 +67,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = datetime.now(timezone.utc)
+    req_id = uuid.uuid4().hex[:8]
+    logger.info("[%s] --> %s %s", req_id, request.method, request.url.path)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("[%s] !!! Unhandled exception", req_id)
+        raise
+    elapsed = (datetime.now(timezone.utc) - start).total_seconds() * 1000
+    logger.info("[%s] <-- %s %s => %d (%.0fms)", req_id, request.method, request.url.path, response.status_code, elapsed)
+    return response
+
 _bearer = HTTPBearer()
 
 
 def _verify_token(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> str:
     if credentials.credentials != VOICE_BRIDGE_SECRET:
+        logger.warning("Auth failed: provided=%s..., expected=%s chars",
+                       credentials.credentials[:6] if len(credentials.credentials) >= 6 else credentials.credentials,
+                       len(VOICE_BRIDGE_SECRET))
         raise HTTPException(status_code=401, detail="Unauthorized")
+    logger.debug("Auth OK")
     return credentials.credentials
 
 
@@ -82,7 +114,7 @@ async def _evict_loop():
         await asyncio.sleep(300)
         evicted = await _store.evict_expired()
         if evicted:
-            print(f"[VoiceBridge] Evicted {evicted} expired session(s).")
+            logger.info("Evicted %d expired session(s).", evicted)
 
 
 class _CompletionRequest(BaseModel):
@@ -190,36 +222,42 @@ async def chat_completions(
     _token: str = Depends(_verify_token),
 ):
     if _agent is None:
+        logger.error("Agent not initialized — returning 503")
         raise HTTPException(status_code=503, detail="Agent not yet initialized")
 
-    # Resolve session ID from ElevenLabs headers or body
     session_id = (
         request.headers.get("X-EL-Conversation-Id")
         or request.headers.get("X-Conversation-Id")
         or body.user
         or str(uuid.uuid4())
     )
+    logger.info("session=%s | user_msg_count=%d | stream=%s | model=%s",
+                session_id[:12], len(body.messages), body.stream, body.model)
 
     session = await _store.get_or_create(session_id)
 
     user_msgs = [m for m in body.messages if isinstance(m, dict) and m.get("role") == "user"]
     if not user_msgs:
+        logger.warning("session=%s | No user message in request body", session_id[:12])
         raise HTTPException(status_code=400, detail="No user message in request")
 
     last_text = user_msgs[-1].get("content", "").strip()[:2000]
+    logger.debug("session=%s | User text: %.80s%s", session_id[:12], last_text, "..." if len(last_text) > 80 else "")
 
-    # Detect and persist language on first user message
     if not session.language:
         detected = detect_language(last_text)
         await _store.update_language(session_id, detected)
         session.language = detected
+        logger.info("session=%s | Language detected: %s", session_id[:12], detected)
 
     messages = list(session.messages)
     messages.append(HumanMessage(content=last_text))
+    logger.debug("session=%s | Invoking agent with %d messages", session_id[:12], len(messages))
 
     try:
         result = await _agent.ainvoke({"messages": messages})
     except Exception as exc:
+        logger.exception("session=%s | Agent invocation failed", session_id[:12])
         raise HTTPException(status_code=500, detail=f"Agent error: {str(exc)[:200]}")
 
     updated = result.get("messages", [])
@@ -227,6 +265,7 @@ async def chat_completions(
 
     ai_text = extract_ai_response(updated) or "I'm sorry, I couldn't process that request."
     ai_text = _strip_markdown(ai_text)
+    logger.info("session=%s | Agent response: %d chars", session_id[:12], len(ai_text))
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
@@ -251,4 +290,6 @@ async def chat_completions(
 
 if __name__ == "__main__":
     import uvicorn
+    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+                        datefmt="%Y-%m-%dT%H:%M:%S%z")
     uvicorn.run(app, host="0.0.0.0", port=8003, log_level="info")
