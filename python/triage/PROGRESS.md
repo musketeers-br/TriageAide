@@ -108,6 +108,58 @@
 - Expanded `app.py` significantly (~660 lines) with step mapping, tool icons, result summarization, and trace rendering
 - Uses `gr.ChatMessage` with metadata for structured tool call display
 
+### Phase 12: LLM-Powered Tools Rewrite
+
+Replaced all deterministic keyword-matching and scoring tools with LLM-powered equivalents using `ChatOpenAI(model="gpt-4o-mini")` inside the MCP servers.
+
+**Why**: Deterministic tools were deeply broken:
+- `parse_symptoms`: substring matching (`if symptom in response_lower`) missed synonyms ("dizzy" ≠ "dizziness"), Portuguese ("sede" ≠ "excessive thirst"), and negation ("no chest pain" still matched "chest pain")
+- `check_red_flags`: only 10 hardcoded combos, missed clinically significant pairs
+- `assess_clinical_risk`: fixed weights, couldn't detect novel drug interactions
+
+**Changes**:
+
+- **triage_server.py** (3 LLM + 1 deterministic tool, down from 5):
+  - `get_next_triage_question` — LLM decides next question based on FHIR context, covered topics, AND patient's initial message (new `patient_initial_message` param fixes the "How are you feeling today?" bug)
+  - `analyze_patient_response` — LLM extracts symptoms with synonym/Portuguese/negation handling (replaces `parse_symptoms`)
+  - `check_red_flags` — LLM cross-references symptoms+conditions+medications, detects drug interactions (new `medications` param)
+  - `build_questionnaire_response_data` — unchanged (deterministic, no intelligence needed)
+  - Removed: `_build_question_plan()`, `RED_FLAGS`, `SYMPTOM_CATEGORIES`, `get_all_triage_topics`, `parse_symptoms`
+
+- **clinical_reasoning_server.py** (1 LLM tool, down from 4):
+  - `clinical_assessment` — single LLM call produces risk assessment + priority suggestion + clinical summary + follow-up tasks (replaces `assess_clinical_risk` + `suggest_priority` + `generate_clinical_summary` + `identify_follow_up_tasks`)
+  - Removed: `RISK_SCORING`, `PRIORITY_MAP`, all 4 old tools
+
+- **agent.py** SYSTEM_PROMPT updated:
+  - New tool names, new `patient_initial_message` param
+  - Merged Steps 3-4 into single Step 3 (`clinical_assessment`)
+  - Added conversation rules about passing initial message and not calling separate tools for risk/priority/summary/tasks
+  - Added example flow showing correct usage of `patient_initial_message`
+
+- **app.py**: 10 natural conversation examples (8 English + 2 Portuguese) replacing 6 robotic keyword-targeted ones
+
+### Phase 13: Bug Fixes and E2E Testing
+
+**Bug: cli.py indentation error** — `if ai_response:` block was at wrong indentation level (same as `try:` instead of inside `try:`), causing SyntaxError. Fixed by moving `if/else` and `messages = response_messages` inside the `try` block.
+
+**Bug: seed_data.py duplicate patients** — `load_all()` mutated the resource dict in-place (appending `triage-seed` tag), so repeated loads would create duplicate patients. Fixed by deep-copying resources (`json.loads(json.dumps(resource))`) and checking for existing tags before appending.
+
+**Bug: seed_data.py `_create_resource` silent failure** — When POST returned 200/201 but `_extract_id_from_location` returned `"?"`, the function returned `("?", None)` which was truthy but invalid. Fixed to return `(None, error_msg)` when ID extraction fails.
+
+**Bug: FHIR duplicate patients from repeated loads** — Each container restart would check `PATIENT_COUNT > 0` and skip, but manual `load_all()` calls created duplicates. Added `reload` command (clean + load) to `seed_data.py`.
+
+**E2E Test Results** (with `LLM_CACHE=off`):
+
+| Scenario | Patient | Initial Message | Agent Response | Verdict |
+|---|---|---|---|---|
+| Maria Silva (DM2+HTN) | ID 2457 | "feeling really thirsty... blood sugar high" | "Have you noticed any changes in your urination?" (skips "How are you feeling?") | PASS |
+| Joao Santos (HF+AF+CKD) | ID 2440 | "trouble breathing at night... legs swollen" | "Have you noticed any chest pain?" (red flag screening) | PASS |
+| Ana Costa (healthy) | ID 2435 | "sore throat for a couple of days" | "difficulty swallowing or breathing?" | PASS |
+| Maria Silva follow-up | — | "weight loss, urinating more" | Detects diabetes alerts (poor control), asks about fatigue/appetite | PASS |
+| Joao Santos follow-up | — | "getting worse, dizzy when standing" | Detects dizziness+HF/AF/warfarin alerts, warns patient | PASS |
+
+**Latency**: ~3-9s per Q&A cycle (3 LLM calls: get_next_triage_question + analyze_patient_response + check_red_flags). Acceptable since patient takes 5-30s to type each reply.
+
 ---
 
 ## Technical Discoveries (Lessons Learned)
@@ -198,23 +250,28 @@ From the triage container, use `http://iris:52773/fhir/r4` (Docker DNS resolves 
 - [x] 3 MCP servers (FHIR, Triage, Clinical Reasoning) implemented and running
 - [x] Agent core (`agent.py`), CLI (`cli.py`) and Web UI (`app.py`) functional
 - [x] 4 test patients with complete FHIR bundles
-- [x] Seed data with load/clean/list
+- [x] Seed data with load/clean/reload/list
 - [x] Complete Docker infrastructure (2 services: iris + triage, Docker Compose)
 - [x] Auto-startup of MCP servers + seed data via `entrypoint.sh`
-- [x] End-to-end test with Maria Silva
+- [x] End-to-end test with all 4 patients (Maria, Joao, Ana, Roberto)
 - [x] Documentation (README, PROGRESS, updated PLAN)
 - [x] Test Gradio UI externally (host port 7860)
-- [x] Test with all 4 patients (Joao, Ana, Roberto)
 - [x] Patient search by name (`search_patients` tool)
 - [x] Separate Docker services (iris + triage)
 - [x] LangSmith observability (optional)
 - [x] Gradio trace panel for real-time agent step progress
 - [x] Translation to English (code + docs)
+- [x] LLM-powered tools replacing deterministic keyword-matching (triage_server.py + clinical_reasoning_server.py)
+- [x] `patient_initial_message` param in `get_next_triage_question` (fixes repeated "How are you feeling?" bug)
+- [x] 10 natural conversation examples in Gradio UI (8 English + 2 Portuguese)
+- [x] cli.py indentation bug fix
+- [x] seed_data.py bug fixes (duplicate patients, silent failure, reload command)
 
 ### Pending / Needs Attention
 
 - [ ] Agent doesn't always create all expected FHIR resources (Flag, Task, QuestionnaireResponse) — depends on the LLM's decision; may need prompt adjustment
 - [ ] Container restart test to validate complete auto-startup pipeline
+- [ ] The `app.py` file uses a complex `gr.Blocks` version (753 lines) that was simplified to `gr.ChatInterface` (71 lines) — the trace panel from Phase 11 was lost in the simplification
 
 ### Future Work / Nice-to-have
 
