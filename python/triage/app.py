@@ -221,7 +221,7 @@ async def _get_agent():
     global _agent_instance, _client
     if _agent_instance is not None:
         return _agent_instance
-    agent, _client = await create_triage_agent()
+    agent, _client = await create_triage_agent(cache_namespace="gradio")
     _agent_instance = agent
     return agent
 

@@ -47,7 +47,7 @@ logger.info("VOICE_BRIDGE_SECRET loaded (%s)", "default" if VOICE_BRIDGE_SECRET 
 async def lifespan(app: FastAPI):
     global _agent, _mcp_client
     logger.info("Initializing triage agent (language=auto, voice_mode=True)...")
-    _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True)
+    _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True, cache_namespace="voice")
     logger.info("Agent ready — listening on port 8003.")
     evict_task = asyncio.create_task(_evict_loop())
     yield
