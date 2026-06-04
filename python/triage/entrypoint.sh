@@ -62,10 +62,14 @@ for port in 8000 8001 8002; do
   done
 done
 
+echo "Starting Voice Bridge on port 8003..."
+uvicorn voice_bridge:app --host 0.0.0.0 --port 8003 --log-level info --no-access-log > /tmp/voice_bridge.log 2>&1 &
+VOICE_PID=$!
+
 cleanup() {
-  echo "Shutting down MCP servers..."
-  kill $FHIR_PID $TRIAGE_PID $CR_PID 2>/dev/null
-  wait $FHIR_PID $TRIAGE_PID $CR_PID 2>/dev/null
+  echo "Shutting down services..."
+  kill $FHIR_PID $TRIAGE_PID $CR_PID $VOICE_PID 2>/dev/null
+  wait $FHIR_PID $TRIAGE_PID $CR_PID $VOICE_PID 2>/dev/null
   echo "Done."
 }
 trap cleanup EXIT INT TERM

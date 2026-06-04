@@ -221,7 +221,7 @@ async def _get_agent():
     global _agent_instance, _client
     if _agent_instance is not None:
         return _agent_instance
-    agent, _client = await create_triage_agent()
+    agent, _client = await create_triage_agent(cache_namespace="gradio")
     _agent_instance = agent
     return agent
 
@@ -550,66 +550,157 @@ CSS = """
 
 
 def main():
+    _el_head = (
+        '<script src="https://unpkg.com/@elevenlabs/convai-widget-embed"'
+        ' async type="text/javascript"></script>'
+    )
+
     with gr.Blocks(
         fill_height=True,
         title="TriageAide — FHIR-First Pre-Consultation Triage",
+        head=_el_head,
     ) as demo:
         gr.Markdown("# 🏥 TriageAide — FHIR-First Pre-Consultation Triage")
 
-        view_mode = gr.State("Side-by-side")
+        with gr.Tabs():
+            with gr.Tab("💬 Chat"):
+                view_mode = gr.State("Side-by-side")
 
-        with gr.Row():
-            view_toggle = gr.Radio(
-                choices=["Side-by-side", "Compact"],
-                value="Side-by-side",
-                label="View Mode",
-                interactive=True,
-                scale=2,
-            )
-            clear_all = gr.Button("🗑️ Clear All", variant="secondary", scale=1)
-
-        with gr.Row(equal_height=True):
-            with gr.Column(scale=3) as chat_col:
-                chatbot = gr.Chatbot(
-                    label="Patient Chat",
-                    height=650,
-                    layout="panel",
-                    placeholder="<strong>Enter a patient ID or name to begin triage</strong>",
-                )
                 with gr.Row():
-                    msg_input = gr.Textbox(
-                        placeholder="Type your message and press Enter...",
-                        show_label=False,
-                        scale=4,
-                        autofocus=True,
+                    view_toggle = gr.Radio(
+                        choices=["Side-by-side", "Compact"],
+                        value="Side-by-side",
+                        label="View Mode",
+                        interactive=True,
+                        scale=2,
                     )
-                    send_btn = gr.Button("Send", variant="primary", scale=1)
-                with gr.Row():
-                    gr.Examples(
-                        examples=[
-                          "Hi, I'm Maria Silva and I've been feeling really thirsty lately",
-                          "I'm Maria Silva, I've been having headaches and blurred vision",
-                          "Hi, I'm Joao Santos, I've been having chest pain",
-                          "I'm Joao Santos, I've been short of breath and my legs are swollen",
-                          "I'm Roberto Lima, my cough has been getting worse",
-                          "I'm Roberto Lima, I've been feeling sad and having trouble sleeping",
-                          "Hi, I'm Ana Costa, I've been having a fever and feeling tired",
-                          "I'm Ana Costa, I've had a cough for the past week",
-                          "Oi, sou a Maria Silva, ando com muita sede e visão embaçada",
-                          "Olá, sou o Roberto Lima, minha tosse está piorando",
-                        ],
-                        inputs=msg_input,
+                    clear_all = gr.Button("🗑️ Clear All", variant="secondary", scale=1)
+
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=3) as chat_col:
+                        chatbot = gr.Chatbot(
+                            label="Patient Chat",
+                            height=650,
+                            layout="panel",
+                            placeholder="<strong>Enter a patient ID or name to begin triage</strong>",
+                        )
+                        with gr.Row():
+                            msg_input = gr.Textbox(
+                                placeholder="Type your message and press Enter...",
+                                show_label=False,
+                                scale=4,
+                                autofocus=True,
+                            )
+                            send_btn = gr.Button("Send", variant="primary", scale=1)
+                        with gr.Row():
+                            gr.Examples(
+                                examples=[
+                                    "Hi, I'm Maria Silva and I've been feeling really thirsty lately",
+                                    "I'm Maria Silva, I've been having headaches and blurred vision",
+                                    "Hi, I'm Joao Santos, I've been having chest pain",
+                                    "I'm Joao Santos, I've been short of breath and my legs are swollen",
+                                    "I'm Roberto Lima, my cough has been getting worse",
+                                    "I'm Roberto Lima, I've been feeling sad and having trouble sleeping",
+                                    "Hi, I'm Ana Costa, I've been having a fever and feeling tired",
+                                    "I'm Ana Costa, I've had a cough for the past week",
+                                    "Oi, sou a Maria Silva, ando com muita sede e visão embaçada",
+                                    "Olá, sou o Roberto Lima, minha tosse está piorando",
+                                ],
+                                inputs=msg_input,
+                            )
+
+                    with gr.Column(scale=2) as trace_col:
+                        trace = gr.Chatbot(
+                            label="Agent Trace",
+                            elem_id="trace-panel",
+                            height=650,
+                            layout="panel",
+                            group_consecutive_messages=False,
+                        )
+                        clear_trace = gr.Button("Clear Trace", size="sm")
+
+            with gr.Tab("🎙️ Voice (ElevenLabs)"):
+                gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
+                gr.Markdown(
+                    "Speak with the triage agent in **English** or **Português (Brasil)**. "
+                    "The agent automatically detects your language and responds in kind.\n\n"
+                    "Fale com o agente de triagem em **inglês** ou **Português (Brasil)**. "
+                    "O agente detecta automaticamente o idioma e responde no mesmo idioma."
+                )
+
+                _el_agent_id = os.getenv("ELEVENLABS_WIDGET_ID", "") or os.getenv("ELEVENLABS_AGENT_ID", "")
+                _bridge_url = os.getenv("VOICE_BRIDGE_URL", "http://localhost:8003")
+
+                def _widget_html(agent_id: str) -> str:
+                    agent_id = (agent_id or "").strip()
+                    if not agent_id:
+                        return (
+                            '<div style="padding:32px;text-align:center;color:#6b7280;">'
+                            '<p style="font-size:15px;">Enter your ElevenLabs Agent ID above and click '
+                            '<strong>Load Widget</strong>.<br>'
+                            'Digite o ID do agente ElevenLabs acima e clique em '
+                            '<strong>Carregar Widget</strong>.</p>'
+                            '</div>'
+                        )
+                    # Primary: custom element (works when head= script loads successfully)
+                    # Fallback iframe is also shown below if the custom element doesn't render
+                    local_bridge = "http://localhost:8003"
+                    iframe_url = f"{local_bridge}/widget?agent_id={agent_id}"
+                    return (
+                        # Custom element — rendered by the globally-loaded ElevenLabs script
+                        '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;">'
+                        f'<elevenlabs-convai agent-id="{agent_id}" '
+                        'style="width:100%;max-width:560px;min-height:420px;"></elevenlabs-convai>'
+                        # Separator + iframe fallback (opens in same page area)
+                        '<details style="width:100%;max-width:560px;">'
+                        '<summary style="cursor:pointer;color:#6b7280;font-size:13px;padding:4px 0;">'
+                        '🔄 Widget not showing? Try the standalone version / Widget não apareceu? Tente a versão standalone'
+                        '</summary>'
+                        f'<iframe src="{iframe_url}" width="100%" height="480" '
+                        'style="border:1px solid #e5e7eb;border-radius:12px;margin-top:8px;" '
+                        'allow="microphone; camera; autoplay; clipboard-write" allowfullscreen>'
+                        '</iframe>'
+                        '</details>'
+                        '</div>'
                     )
 
-            with gr.Column(scale=2) as trace_col:
-                trace = gr.Chatbot(
-                    label="Agent Trace",
-                    elem_id="trace-panel",
-                    height=650,
-                    layout="panel",
-                    group_consecutive_messages=False,
-                )
-                clear_trace = gr.Button("Clear Trace", size="sm")
+                with gr.Row():
+                    agent_id_box = gr.Textbox(
+                        value=_el_agent_id,
+                        placeholder="agent_XXXXXXXXXXXXXXXXXXXXXXXX",
+                        label="ElevenLabs Agent ID",
+                        scale=5,
+                        interactive=True,
+                    )
+                    load_widget_btn = gr.Button("🎙️ Load Widget / Carregar Widget", variant="primary", scale=2)
+
+                voice_widget = gr.HTML(value=_widget_html(_el_agent_id))
+
+                load_widget_btn.click(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
+                agent_id_box.submit(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
+
+                with gr.Accordion("⚙️ Setup Instructions / Instruções de Configuração", open=not bool(_el_agent_id)):
+                    gr.Markdown(f"""
+**English — Custom LLM setup:**
+1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
+2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
+3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
+4. Select a Brazilian Portuguese voice and enable **language auto-detection**
+5. Copy the Agent ID from the URL and paste it in the field above
+
+**Português — Configuração do Custom LLM:**
+1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
+2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
+3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
+4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
+5. Copie o Agent ID da URL e cole no campo acima
+""")
+
+                with gr.Row():
+                    gr.Markdown(
+                        f"**Voice Bridge:** `{_bridge_url}/v1/chat/completions` &nbsp;|&nbsp; "
+                        f"**Health:** `{_bridge_url}/health`"
+                    )
 
         trace_state = gr.State([])
 

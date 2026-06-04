@@ -33,11 +33,11 @@ async def run_interactive():
 
             ai_response = extract_ai_response(response_messages)
 
-        if ai_response:
-            print(f"\nAgent: {ai_response}\n")
-            messages.append(AIMessage(content=ai_response))
-        else:
-            print("\nAgent: [processed without textual response]\n")
+            if ai_response:
+                print(f"\nAgent: {ai_response}\n")
+                messages.append(AIMessage(content=ai_response))
+            else:
+                print("\nAgent: [processed without textual response]\n")
 
             messages = response_messages
 

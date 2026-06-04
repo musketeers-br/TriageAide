@@ -31,14 +31,11 @@ services:
       - iris
     env_file:
       - ./python/triage/.env
-    environment:
-      - FHIR_BASE_URL=http://iris:52773/fhir/r4
-      - FHIR_USER=_SYSTEM
-      - FHIR_PASS=SYS
     ports:
       - 8000:8000
       - 8001:8001
       - 8002:8002
+      - 8003:8003
       - 7860:7860
     volumes:
       - ./python/triage:/app
