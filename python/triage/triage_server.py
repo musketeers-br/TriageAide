@@ -1,93 +1,144 @@
 import json
+import os
+from dotenv import load_dotenv
 from fastmcp import FastMCP
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
+
+load_dotenv(override=True)
 
 mcp = FastMCP("TriageServer")
 
-RED_FLAGS = {
-    "shortness of breath": ["heart failure", "copd", "asthma", "atrial fibrillation"],
-    "chest pain": ["heart failure", "hypertension", "atrial fibrillation"],
-    "excessive thirst": ["diabetes", "diabetes type 2"],
-    "blurred vision": ["diabetes", "diabetes type 2", "hypertension"],
-    "leg swelling": ["heart failure", "hypertension"],
-    "dizziness": ["hypertension", "atrial fibrillation"],
-    "bleeding": ["warfarin", "anticoagulant"],
-    "worsening cough": ["copd", "heart failure"],
-    "suicidal ideation": ["depression"],
-    "severe fatigue": ["diabetes", "heart failure", "depression"],
-}
-
-SYMPTOM_CATEGORIES = {
-    "general": ["fatigue", "tiredness", "fever", "weight loss", "excessive thirst"],
-    "cardiovascular": ["shortness of breath", "chest pain", "palpitation", "leg swelling", "dizziness"],
-    "respiratory": ["cough", "difficulty breathing", "worsening cough", "wheezing"],
-    "neurological": ["headache", "dizziness", "blurred vision", "confusion"],
-    "metabolic": ["excessive thirst", "polydipsia", "polyuria", "blurred vision"],
-    "mental": ["sadness", "insomnia", "suicidal ideation", "anxiety", "irritability"],
-}
+_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3, max_tokens=800)
 
 
-def _build_question_plan(patient_context: dict) -> list[dict]:
-    conditions = [c.get("display", "").lower() for c in patient_context.get("conditions", []) if c.get("status") == "active"]
-    medications = [m.get("medication", "").lower() for m in patient_context.get("medications", []) if m.get("status") == "active"]
-    allergies = patient_context.get("allergies", [])
-    last_encounter = patient_context.get("last_encounter", "")
+async def _llm_json(system_prompt: str, user_prompt: str, fallback: dict = None) -> str:
+    try:
+        response = await _llm.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+        content = response.content
+        if content.strip().startswith("```"):
+            lines = content.strip().split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            content = "\n".join(lines)
+        parsed = json.loads(content)
+        return json.dumps(parsed, ensure_ascii=False)
+    except json.JSONDecodeError:
+        raw = response.content if 'response' in dir() else ""
+        if fallback is not None:
+            return json.dumps(fallback, ensure_ascii=False)
+        return json.dumps({"error": "LLM returned invalid JSON", "raw": raw[:500]}, ensure_ascii=False)
+    except Exception as e:
+        if fallback is not None:
+            return json.dumps(fallback, ensure_ascii=False)
+        return json.dumps({"error": f"LLM call failed: {type(e).__name__}: {str(e)[:300]}"}, ensure_ascii=False)
 
-    plan = []
 
-    plan.append({"topic": "reason_for_visit", "question": "How are you feeling today?"})
+_Q_SYSTEM = """You are a pre-consultation triage nurse deciding the next question to ask a patient.
 
-    for cond in conditions:
-        if "diabetes" in cond:
-            plan.append({"topic": "diabetes_control", "question": "I noticed you have diabetes. Has your blood sugar been controlled lately?"})
-            plan.append({"topic": "diabetes_symptoms", "question": "Have you had increased thirst, hunger, or urination in recent days?"})
-            plan.append({"topic": "diabetes_vision", "question": "Have you noticed any changes in your vision?"})
-        if "hypertens" in cond:
-            plan.append({"topic": "hypertension_control", "question": "Has your blood pressure been controlled lately?"})
-            plan.append({"topic": "hypertension_symptoms", "question": "Have you felt dizzy or had headaches recently?"})
-            plan.append({"topic": "hypertension_swelling", "question": "Have you noticed swelling in your legs?"})
-        if "heart failure" in cond or ("insufficiency" in cond and "cardiac" in cond):
-            plan.append({"topic": "hf_shortness_of_breath", "question": "Have you had shortness of breath when lying down or climbing stairs?"})
-            plan.append({"topic": "hf_swelling", "question": "Have you noticed swelling in your legs or abdomen?"})
-        if "atrial fibrillation" in cond or "fibrillation" in cond:
-            plan.append({"topic": "af_palpitation", "question": "Have you felt your heart racing or fluttering recently?"})
-        if "copd" in cond or "obstructive" in cond:
-            plan.append({"topic": "copd_shortness_of_breath", "question": "Has your shortness of breath worsened in recent days?"})
-            plan.append({"topic": "copd_cough", "question": "Have you had increased coughing or different sputum than usual?"})
-        if "depress" in cond:
-            plan.append({"topic": "depression_emotional", "question": "How are you feeling emotionally?"})
-            plan.append({"topic": "depression_risk", "question": "Have you had thoughts of hurting yourself or giving up?"})
-        if "osteoarthritis" in cond or "arthrosis" in cond:
-            plan.append({"topic": "osteoarthritis_pain", "question": "How is your knee pain?"})
-            plan.append({"topic": "osteoarthritis_impact", "question": "Does the pain affect your daily activities?"})
+Given the patient's FHIR medical history, the topics already covered in conversation, and optionally the patient's initial message, determine the NEXT most important question to ask.
 
-    for med in medications:
-        if "warfarin" in med:
-            plan.append({"topic": "warfarin_bleeding", "question": "Have you noticed any unusual bleeding or bruising?"})
-        if "metformin" in med:
-            plan.append({"topic": "metformin_gi", "question": "Have you had nausea, abdominal pain, or diarrhea?"})
+Rules:
+- If the patient's initial message already states their reason for visit or symptoms, do NOT ask "How are you feeling today?" — instead, acknowledge what they shared and ask the first relevant condition-specific follow-up.
+- Ask about the most clinically urgent topic first: red-flag symptoms related to existing conditions, then condition control, then medication side effects, then general changes.
+- NEVER ask about information already in the FHIR record — reference it instead.
+- NEVER repeat a topic that is already in covered_topics.
+- Formulate the question in a natural, welcoming, conversational manner — as a healthcare professional would speak to a patient.
+- Each question should cover exactly ONE clinical topic.
 
-    for allergy in allergies:
-        substance = allergy.get("substance", "").lower()
-        severity = allergy.get("criticality", "")
-        if "anaphylaxis" in str(allergy.get("reactions", [])) or severity == "high":
-            plan.append({"topic": f"allergy_{substance.replace(' ', '_')}", "question": f"Reminder: you have a severe allergy to {substance}. Avoid this medication."})
+Return a JSON object with:
+- "question": the question text (string or null if no more questions)
+- "topic": a short snake_case identifier for the topic (string or null)
+- "remaining_topics": list of topic identifiers still to cover after this one
+- "total_remaining": count of remaining topics after this one"""
 
-    if last_encounter:
-        plan.append({"topic": "changes_since_last", "question": f"Your last visit was on {last_encounter}. Has anything changed since then?"})
 
-    seen = set()
-    unique_plan = []
-    for item in plan:
-        if item["topic"] not in seen:
-            seen.add(item["topic"])
-            unique_plan.append(item)
+_A_SYSTEM = """You are a clinical assistant extracting structured symptom data from a patient's response during pre-consultation triage.
 
-    return unique_plan
+Given the patient's free-text response and their FHIR medical context, extract:
+
+1. **Symptoms** — identify each symptom mentioned. Use standard clinical terminology:
+   - "dizzy" → "dizziness"
+   - "thirsty" / "really thirsty" / "drinking a lot" → "excessive thirst"
+   - "can't breathe" / "hard to breathe" / "out of breath" → "shortness of breath"
+   - "heart racing" / "heart fluttering" → "palpitation"
+   - "swollen legs" / "ankle swelling" → "leg swelling"
+   - "blurry vision" / "vision changes" → "blurred vision"
+   - "feeling down" / "sad" → "sadness"
+   - "can't sleep" / "trouble sleeping" → "insomnia"
+   - "want to hurt myself" / "thoughts of giving up" → "suicidal ideation"
+   - "coughing more" / "cough got worse" → "worsening cough"
+   - "tired" / "exhausted" / "no energy" → "fatigue"
+   - Apply the same logic for Portuguese: "sede" → "excessive thirst", "falta de ar" → "shortness of breath", "tontura" → "dizziness", etc.
+
+2. **Category** — classify each symptom: cardiovascular, respiratory, metabolic, neurological, mental, general
+
+3. **Severity** — mild, moderate, or severe based on descriptors and clinical context:
+   - "very", "severe", "unbearable", "worsening", "really", "a lot" → severe
+   - "mild", "slight", "little", "a bit" → mild
+   - Otherwise → moderate
+
+4. **Negation** — "no chest pain" or "haven't felt dizzy" means the symptom is ABSENT. Do NOT include negated symptoms.
+
+5. **Duration** — extract if mentioned (e.g., "for 3 days", "since last week")
+
+6. **Overall severity** — the highest severity among identified symptoms, or "mild" if no symptoms found.
+
+Return a JSON object:
+{
+  "raw_response": "<first 200 chars of response>",
+  "identified_symptoms": [{"symptom": "<standard term>", "category": "<category>", "severity": "<mild|moderate|severe>"}],
+  "duration": "<extracted duration or empty string>",
+  "overall_severity": "<mild|moderate|severe>"
+}"""
+
+
+_RF_SYSTEM = """You are a clinical safety officer checking for red flags (warning signs) in a pre-consultation triage.
+
+Given the patient's current symptoms, active conditions, and active medications, identify dangerous clinical combinations that require urgent attention.
+
+Check for these known high-risk combinations AND any other clinically significant ones:
+- Chest pain + heart failure / hypertension / atrial fibrillation
+- Shortness of breath + heart failure / COPD / asthma
+- Bleeding + warfarin / anticoagulant
+- Suicidal ideation + depression / antidepressants
+- Excessive thirst / blurred vision + diabetes (possible poor control)
+- Dizziness + hypertension / atrial fibrillation / antihypertensives
+- Leg swelling + heart failure / hypertension
+- Worsening cough + COPD / heart failure / ACE inhibitors
+- Confusion + diabetes (possible hypoglycemia) / heart failure
+- Severe fatigue + heart failure / diabetes / depression
+- Any drug-symptom interaction beyond the list above
+
+For each alert, classify the risk as:
+- "critical" — requires immediate emergency attention (chest pain, active bleeding on anticoagulant, suicidal ideation, severe respiratory distress)
+- "elevated" — needs urgent follow-up but not immediately life-threatening
+
+Return a JSON object:
+{
+  "alerts": [
+    {
+      "red_flag": "<brief description of the dangerous combo>",
+      "symptom": "<the symptom involved>",
+      "related_condition_or_medication": "<the condition or medication involved>",
+      "risk": "<elevated|critical>",
+      "explanation": "<1-2 sentence clinical reasoning>"
+    }
+  ],
+  "has_critical_red_flag": <true if any alert has risk="critical">,
+  "alert_count": <number of alerts>
+}"""
 
 
 @mcp.tool()
-async def get_next_triage_question(patient_context: str, covered_topics: list[str] = None) -> str:
-    """Returns the NEXT triage question (one at a time) based on FHIR history and already covered topics. patient_context = JSON with patient data. covered_topics = list of already answered topics (e.g. ["diabetes_control","hypertension_control"])."""
+async def get_next_triage_question(
+    patient_context: str,
+    covered_topics: list[str] = None,
+    patient_initial_message: str = "",
+) -> str:
+    """Returns the NEXT triage question (one at a time) based on FHIR history, already covered topics, and optionally the patient's initial message. If the initial message already states the reason for visit, the tool skips the generic opener and goes directly to condition-specific questions. patient_context = JSON with patient data. covered_topics = list of already answered topics. patient_initial_message = the patient's first message to the agent (optional)."""
     try:
         ctx = json.loads(patient_context)
     except json.JSONDecodeError:
@@ -95,87 +146,63 @@ async def get_next_triage_question(patient_context: str, covered_topics: list[st
 
     covered = covered_topics if covered_topics else []
 
-    covered_set = set(covered)
-    full_plan = _build_question_plan(ctx)
-    remaining = [q for q in full_plan if q["topic"] not in covered_set]
+    ctx_summary = json.dumps(ctx, ensure_ascii=False)[:2000]
+    user_prompt = f"""Patient FHIR context:
+{ctx_summary}
 
-    if not remaining:
-        return json.dumps(
-            {"question": None, "topic": None, "remaining_topics": [], "total_remaining": 0},
-            ensure_ascii=False,
-        )
+Covered topics: {json.dumps(covered)}
 
-    next_q = remaining[0]
-    all_remaining_topics = [q["topic"] for q in remaining[1:]]
+Patient's initial message: {patient_initial_message or "(not provided)"}
 
-    return json.dumps(
-        {
-            "question": next_q["question"],
-            "topic": next_q["topic"],
-            "remaining_topics": all_remaining_topics,
-            "total_remaining": len(remaining) - 1,
-        },
-        ensure_ascii=False,
-    )
+Determine the next question to ask. Return JSON with question, topic, remaining_topics, total_remaining."""
+
+    fallback = {
+        "question": None,
+        "topic": None,
+        "remaining_topics": [],
+        "total_remaining": 0,
+    }
+
+    return await _llm_json(_Q_SYSTEM, user_prompt, fallback=fallback)
 
 
 @mcp.tool()
-async def get_all_triage_topics(patient_context: str) -> str:
-    """Returns all available triage topics for the patient. patient_context = JSON with patient data. Use to see all topics before starting triage."""
+async def analyze_patient_response(
+    patient_response: str,
+    patient_context: str = "{}",
+) -> str:
+    """Extracts and structures symptoms, duration, and severity from the patient's response using clinical reasoning. Handles synonyms, Portuguese, negation, and clinical context. patient_response = free text of the patient's response. patient_context = JSON with patient data (optional, for clinical context)."""
     try:
         ctx = json.loads(patient_context)
-    except json.JSONDecodeError:
-        return json.dumps({"error": "patient_context must be valid JSON"}, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError):
+        ctx = {}
 
-    full_plan = _build_question_plan(ctx)
-    return json.dumps(
-        {
-            "topics": [{"topic": q["topic"], "question": q["question"]} for q in full_plan],
-            "total": len(full_plan),
-        },
-        ensure_ascii=False,
-    )
+    ctx_summary = json.dumps(ctx, ensure_ascii=False)[:1500]
+    user_prompt = f"""Patient medical context:
+{ctx_summary}
 
+Patient's response:
+{patient_response}
 
-@mcp.tool()
-async def parse_symptoms(patient_response: str) -> str:
-    """Extracts and structures symptoms, duration, and severity from the patient's response. patient_response = free text of the patient's response."""
-    response_lower = patient_response.lower()
+Extract structured symptom data from this response. Return JSON with raw_response, identified_symptoms, duration, overall_severity."""
 
-    found_symptoms = []
-    for category, symptoms in SYMPTOM_CATEGORIES.items():
-        for symptom in symptoms:
-            if symptom in response_lower:
-                found_symptoms.append({"symptom": symptom, "category": category})
+    fallback = {
+        "raw_response": patient_response[:200],
+        "identified_symptoms": [],
+        "duration": "",
+        "overall_severity": "mild",
+    }
 
-    duration = ""
-    for marker in ["for ", "last ", "past ", "since "]:
-        if marker in response_lower:
-            idx = response_lower.index(marker)
-            snippet = response_lower[idx : idx + 30]
-            duration = snippet.strip()
-            break
-
-    severity = "moderate"
-    if any(w in response_lower for w in ["very", "severe", "strong", "serious", "unbearable", "worsening"]):
-        severity = "severe"
-    elif any(w in response_lower for w in ["mild", "slight", "little", "minimal"]):
-        severity = "mild"
-
-    return json.dumps(
-        {
-            "raw_response": patient_response[:200],
-            "identified_symptoms": found_symptoms,
-            "estimated_duration": duration,
-            "estimated_severity": severity,
-        },
-        ensure_ascii=False,
-    )
+    return await _llm_json(_A_SYSTEM, user_prompt, fallback=fallback)
 
 
 @mcp.tool()
-async def check_red_flags(symptoms: list, conditions: list) -> str:
-    """Checks warning signs (red flags) by cross-referencing current symptoms with existing conditions. symptoms = JSON list of symptoms, conditions = JSON list of active conditions."""
+async def check_red_flags(
+    symptoms: list,
+    conditions: list,
+    medications: list = None,
+) -> str:
+    """Checks warning signs (red flags) by cross-referencing current symptoms with existing conditions and active medications using clinical reasoning. Detects drug-symptom interactions. symptoms = JSON list of identified symptoms (from analyze_patient_response). conditions = JSON list of active conditions. medications = JSON list of medications (optional but recommended for drug interaction detection)."""
     try:
         if symptoms is None:
             symptom_list = []
@@ -185,48 +212,53 @@ async def check_red_flags(symptoms: list, conditions: list) -> str:
             symptom_list = symptoms
     except json.JSONDecodeError:
         symptom_list = [{"symptom": str(symptoms)}]
+
     try:
         if conditions is None:
-            condition_list = []
+            cond_list = []
         elif isinstance(conditions, str):
-            condition_list = json.loads(conditions)
+            cond_list = json.loads(conditions)
         else:
-            condition_list = conditions
+            cond_list = conditions
     except json.JSONDecodeError:
-        condition_list = [{"display": str(conditions)}]
+        cond_list = [{"display": str(conditions)}]
 
-    condition_names = [c.get("display", "").lower() if isinstance(c, dict) else c.lower() for c in condition_list]
-    symptom_names = [s.get("symptom", "").lower() if isinstance(s, dict) else s.lower() for s in symptom_list]
+    try:
+        if medications is None:
+            med_list = []
+        elif isinstance(medications, str):
+            med_list = json.loads(medications)
+        else:
+            med_list = medications
+    except json.JSONDecodeError:
+        med_list = []
 
-    alerts = []
-    for symptom_name in symptom_names:
-        for flag_symptom, related_conditions in RED_FLAGS.items():
-            if flag_symptom in symptom_name or symptom_name in flag_symptom:
-                for rc in related_conditions:
-                    if any(rc in cn for cn in condition_names):
-                        alerts.append(
-                            {
-                                "red_flag": f"{symptom_name} + {rc}",
-                                "symptom": symptom_name,
-                                "related_condition": rc,
-                                "risk": "elevated",
-                            }
-                        )
+    user_prompt = f"""Identified symptoms:
+{json.dumps(symptom_list, ensure_ascii=False)[:1500]}
 
-    has_critical = any(s.get("symptom", "").lower() in ["chest pain", "suicidal ideation", "bleeding", "shortness of breath"] for s in (symptom_list if isinstance(symptom_list, list) else []))
+Active conditions:
+{json.dumps(cond_list, ensure_ascii=False)[:1500]}
 
-    return json.dumps(
-        {
-            "alerts": alerts,
-            "has_critical_red_flag": has_critical,
-            "alert_count": len(alerts),
-        },
-        ensure_ascii=False,
-    )
+Active medications:
+{json.dumps(med_list, ensure_ascii=False)[:1500]}
+
+Check for red flags and dangerous combinations. Return JSON with alerts, has_critical_red_flag, alert_count."""
+
+    fallback = {
+        "alerts": [],
+        "has_critical_red_flag": False,
+        "alert_count": 0,
+    }
+
+    return await _llm_json(_RF_SYSTEM, user_prompt, fallback=fallback)
 
 
 @mcp.tool()
-async def build_questionnaire_response_data(patient_id: str, questions: list, answers: list) -> str:
+async def build_questionnaire_response_data(
+    patient_id: str,
+    questions: list,
+    answers: list,
+) -> str:
     """Builds data structure for FHIR QuestionnaireResponse ready to be saved. questions = JSON list of questions, answers = JSON list of answers (same order)."""
     try:
         if questions is None:
@@ -237,6 +269,7 @@ async def build_questionnaire_response_data(patient_id: str, questions: list, an
             q_list = questions
     except json.JSONDecodeError:
         q_list = [str(questions)] if questions else []
+
     try:
         if answers is None:
             a_list = []
