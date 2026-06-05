@@ -352,7 +352,7 @@ def _apply_trace_event(event, chat_history, trace_history, compact, st):
                 "title": f"{icon} → {tool_name}",
                 "status": "pending",
                 "id": f"tool-{run_id}",
-                "parent_id": f"step-{step_num}" if step_num else None,
+                    "parent_id": f"step-{step_num}" if step_num else "",
                 "log": input_summary,
             },
         )
@@ -390,7 +390,7 @@ def _apply_trace_event(event, chat_history, trace_history, compact, st):
                 metadata={
                     "title": f"{icon} {tool_name} · {summary}",
                     "status": "done",
-                    "parent_id": f"step-{step_num}" if step_num else None,
+                    "parent_id": f"step-{step_num}" if step_num else "",
                     "duration": elapsed,
                 },
             ))
