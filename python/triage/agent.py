@@ -15,32 +15,49 @@ from langchain_openai import ChatOpenAI
 load_dotenv(override=True)
 
 
-def _normalize_cache_prompt(prompt_str):
-    """Strip volatile fields from serialized messages so cache keys match across runs.
+def _msg_type(msg):
+    lc_id = msg.get("id", [])
+    if isinstance(lc_id, list) and len(lc_id) >= 2:
+        return lc_id[-1].lower().replace("message", "")
+    kwargs = msg.get("kwargs", {})
+    return kwargs.get("type", "")
 
-    Removes: response_metadata, usage_metadata, token_usage, OpenAI chatcmpl-* IDs,
-    tool_call IDs, and lc message IDs — all of which change between identical invocations.
+
+def _normalize_cache_prompt(prompt_str):
+    """Derive a cache key from user messages + tool call history only.
+
+    Instead of hashing the full serialized prompt (which includes volatile
+    fields that change between runs), we extract only:
+      - The ordered list of HumanMessage contents (what the user said)
+      - The ordered list of tool names called so far (intermediate state)
+
+    This ensures:
+      - Same user input + same tool flow = same key = cache hit (legitimate)
+      - Different user messages or different tool history = cache miss
+      - No stale-context responses from mismatched sessions
     """
     try:
         msgs = json.loads(prompt_str)
     except (json.JSONDecodeError, TypeError):
         return prompt_str
-    normalized = []
+    user_contents = []
+    tool_sequence = []
     for msg in msgs:
+        mtype = _msg_type(msg)
         kwargs = msg.get("kwargs", {})
-        kwargs.pop("response_metadata", None)
-        kwargs.pop("usage_metadata", None)
-        kwargs.pop("id", None)
-        add_kwargs = kwargs.get("additional_kwargs", {})
-        add_kwargs.pop("refusal", None)
-        tool_calls = add_kwargs.get("tool_calls", [])
-        for tc in tool_calls:
-            tc.pop("id", None)
-        if "tool_call_id" in add_kwargs:
-            add_kwargs["tool_call_id"] = "__normalized__"
-        msg["kwargs"] = kwargs
-        normalized.append(msg)
-    return json.dumps(normalized, sort_keys=True, ensure_ascii=False)
+        if mtype == "human":
+            content = kwargs.get("content", "")
+            if content:
+                user_contents.append(content)
+        elif mtype == "tool":
+            name = kwargs.get("name")
+            if name:
+                tool_sequence.append(name)
+    return json.dumps(
+        {"u": user_contents, "t": tool_sequence},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
 
 
 def _get_llm_cache(cache_namespace: str = ""):
