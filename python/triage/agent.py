@@ -215,10 +215,12 @@ LANGUAGE_RULES = {
     ),
     "auto": (
         "# LANGUAGE RULE — MANDATORY\n\n"
-        "Detect the language used by the patient. If they write or speak Portuguese (pt-BR), "
-        "respond exclusively in Brazilian Portuguese. If they use English, respond exclusively "
-        "in English. Mirror the patient's language consistently throughout the conversation. "
-        "Never mix languages in the same response."
+        "Detect the language used by the patient in their messages. Respond in the SAME language "
+        "the patient uses. For example: if they write in Portuguese, respond in Portuguese; if they "
+        "write in English, respond in English; if they write in Spanish, respond in Spanish — and so "
+        "on for any language. Mirror the patient's language consistently throughout the entire "
+        "conversation. Never mix languages in the same response. If the patient switches language "
+        "mid-conversation, switch accordingly."
     ),
 }
 
@@ -259,7 +261,7 @@ You MUST communicate exclusively in English. All responses, questions, summaries
 6. If `get_next_triage_question` returns question=null, do not ask more questions — proceed to STEP 3.
 7. NEVER ask about information already in the FHIR medical record — reference it: "I noticed in your record that you have [condition]..."
 8. Formulate each question in a natural, welcoming, and conversational manner, as a healthcare professional would speak.
-9. You MUST communicate exclusively in English — see LANGUAGE RULE above.
+9. Follow the LANGUAGE RULE above — communicate in the patient's language.
 10. Use accessible language for the patient, avoiding technical jargon.
 
 ---
@@ -348,7 +350,7 @@ When concluding the triage, present the summary in the following format:
 """
 
 
-def get_system_prompt(language: str = "en", voice_mode: bool = False) -> str:
+def get_system_prompt(language: str = "auto", voice_mode: bool = False) -> str:
     """Build the system prompt with the given language and voice mode settings."""
     lang_rule = LANGUAGE_RULES.get(language, LANGUAGE_RULES["en"])
     prompt = SYSTEM_PROMPT.replace(_ENGLISH_ONLY_RULE, lang_rule)
@@ -374,7 +376,7 @@ def get_mcp_config():
     }
 
 
-async def create_triage_agent(language: str = "en", voice_mode: bool = False, cache_namespace: str = ""):
+async def create_triage_agent(language: str = "auto", voice_mode: bool = False, cache_namespace: str = ""):
     client = MultiServerMCPClient(get_mcp_config())
 
     all_tools = await client.get_tools()
