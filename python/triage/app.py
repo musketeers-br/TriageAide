@@ -214,11 +214,12 @@ class TriageTraceHandler(AsyncCallbackHandler):
             "elapsed": elapsed,
         })
 
-    async def on_tool_error(self, error, *, run_id, name, **kwargs):
-        logger.error("Tool error: %s | %s: %s", name, type(error).__name__, str(error)[:500])
+    async def on_tool_error(self, error, *, run_id, **kwargs):
+        tool_name = kwargs.get("name", "unknown")
+        logger.error("Tool error: %s | %s: %s", tool_name, type(error).__name__, str(error)[:500])
         await self.queue.put({
             "type": "tool_error",
-            "tool_name": name,
+            "tool_name": tool_name,
             "run_id": str(run_id),
             "error": f"{type(error).__name__}: {str(error)[:500]}",
         })

@@ -6,7 +6,9 @@ from logging_config import setup_logging
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
+from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, create_model
 
 load_dotenv(override=True)
 
@@ -192,6 +194,53 @@ def get_mcp_config():
     return config
 
 
+def _fix_tool_args_schema(tools):
+    fixed = []
+    for tool in tools:
+        if not isinstance(tool, StructuredTool):
+            fixed.append(tool)
+            continue
+        schema = tool.args_schema
+        if isinstance(schema, dict) and schema.get("properties"):
+            try:
+                props = schema.get("properties", {})
+                required = set(schema.get("required", []))
+                field_defs = {}
+                for pname, pval in props.items():
+                    ptype = str
+                    ann = pval.get("type", "string")
+                    if ann == "array":
+                        ptype = list
+                    elif ann == "integer":
+                        ptype = int
+                    elif ann == "number":
+                        ptype = float
+                    elif ann == "boolean":
+                        ptype = bool
+                    default = ... if pname in required else pval.get("default", None)
+                    field_defs[pname] = (ptype, default)
+                model = create_model(
+                    f"{tool.name}_input",
+                    __config__={"extra": "allow"},
+                    **field_defs,
+                )
+                new_tool = StructuredTool(
+                    name=tool.name,
+                    description=tool.description or "",
+                    args_schema=model,
+                    coroutine=tool.coroutine,
+                    response_format=tool.response_format,
+                    metadata=tool.metadata,
+                )
+                logger.debug("Fixed args_schema for tool: %s", tool.name)
+                fixed.append(new_tool)
+                continue
+            except Exception as e:
+                logger.warning("Could not fix args_schema for %s: %s", tool.name, e)
+        fixed.append(tool)
+    return fixed
+
+
 async def create_triage_agent(language: str = "auto", voice_mode: bool = False, cache_namespace: str = ""):
     logger.info("Creating triage agent | language=%s | voice_mode=%s | cache_ns=%s", language, voice_mode, cache_namespace or "(none)")
     client = MultiServerMCPClient(get_mcp_config())
@@ -200,7 +249,9 @@ async def create_triage_agent(language: str = "auto", voice_mode: bool = False, 
 
     logger.info("Total tools loaded: %d", len(all_tools))
     for t in all_tools:
-        logger.debug("Tool available: %s", t.name)
+        logger.debug("Tool available: %s | args_schema type: %s", t.name, type(t.args_schema).__name__)
+
+    all_tools = _fix_tool_args_schema(all_tools)
 
     llm_cache = get_llm_cache(cache_namespace)
     tool_cache = get_tool_cache(cache_namespace)
