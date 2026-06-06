@@ -60,8 +60,8 @@ Two independent Docker services on a shared `fhir-net` bridge network:
 
 ```
 python/triage/
-.env                        # FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_* — NOT tracked in git
-.env.example                # Template without credentials
+.env # FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*, LOG_LEVEL — NOT tracked in git
+.env.example # Template without credentials (LOG_LEVEL defaults to DEBUG)
 requirements.txt            # Python dependencies
 Dockerfile                  # Python 3.12-slim image for the triage service
 entrypoint.sh               # Container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
@@ -71,10 +71,11 @@ seed_data/                  # FHIR JSON bundles for loading
     patient_joao_santos.json
     patient_ana_costa.json
     patient_roberto_lima.json
-fhir_server.py              # MCP Server 1 — FHIR CRUD (port 8000)
-triage_server.py            # MCP Server 2 — contextual triage (port 8001)
+fhir_server.py # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
-agent.py                    # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file handlers)
+agent.py # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
 app.py                      # Gradio chat UI with trace panel — Web (:7860)
 start_servers.sh            # Script to start the 3 MCP servers + Gradio (manual)
@@ -129,7 +130,7 @@ README.md                   # Usage instructions
 - **MCP**: fastmcp with transport="streamable-http"
 - **Agent**: langchain-mcp-adapters + MultiServerMCPClient + load_mcp_tools + create_agent (with `system_prompt`)
 - **UI**: Gradio gr.ChatInterface (6.x, without `type="messages"`) with trace panel
-- **Observability**: LangSmith tracing (optional, enabled when LANGSMITH_API_KEY is set)
+- **Observability**: LangSmith tracing (optional, enabled when LANGSMITH_API_KEY is set) + structured logging (LOG_LEVEL env var, default DEBUG)
 - **Deploy**: Docker Compose with 2 services (iris + triage) on fhir-net bridge network
 
 ## Discoveries & Challenges
@@ -164,6 +165,7 @@ README.md                   # Usage instructions
 - [x] LangSmith observability (optional)
 - [x] Gradio trace panel for real-time agent step progress
 - [x] Translation to English (code + docs)
+- [x] Structured logging of all modules (logging_config.py, LOG_LEVEL env var)
 
 ### Pending
 
@@ -175,7 +177,7 @@ README.md                   # Usage instructions
 - [ ] Voice interaction
 - [ ] Automated tests
 - [ ] Contest submission preparation
-- [ ] Structured logging and health checks on MCP servers
+- [ ] Health check endpoints on MCP servers
 
 ## Validation
 
@@ -190,6 +192,9 @@ docker compose up -d
 docker compose exec triage bash -c 'cat /tmp/fhir_server.log'
 docker compose exec triage bash -c 'cat /tmp/triage_server.log'
 docker compose exec triage bash -c 'cat /tmp/cr_server.log'
+
+# Live logs (all modules, DEBUG level)
+docker compose logs triage -f
 
 # Check seed data
 docker compose exec triage bash -c 'cd /app && FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py list'

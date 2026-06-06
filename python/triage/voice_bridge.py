@@ -9,7 +9,6 @@ import os
 import re
 import json
 import uuid
-import logging
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -24,16 +23,9 @@ from langchain_core.messages import HumanMessage
 
 from agent import create_triage_agent, extract_ai_response
 from voice_session import VoiceSessionStore, detect_language
+from logging_config import setup_logging
 
-logger = logging.getLogger("voice_bridge")
-logger.setLevel(logging.DEBUG)
-
-_handler = logging.StreamHandler()
-_handler.setFormatter(logging.Formatter(
-    "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-))
-logger.addHandler(_handler)
+logger = setup_logging("voice_bridge", "voice_bridge.log")
 
 _agent = None
 _mcp_client = None
@@ -47,8 +39,18 @@ logger.info("VOICE_BRIDGE_SECRET loaded (%s)", "default" if VOICE_BRIDGE_SECRET 
 async def lifespan(app: FastAPI):
     global _agent, _mcp_client
     logger.info("Initializing triage agent (language=auto, voice_mode=True)...")
-    _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True, cache_namespace="voice")
-    logger.info("Agent ready — listening on port 8003.")
+    max_retries = 6
+    for attempt in range(1, max_retries + 1):
+        try:
+            _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True, cache_namespace="voice")
+            logger.info("Agent ready — listening on port 8003.")
+            break
+        except Exception as e:
+            logger.warning("Agent init attempt %d/%d failed: %s", attempt, max_retries, str(e)[:300])
+            if attempt == max_retries:
+                logger.error("Agent init failed after %d attempts — voice bridge will return 503", max_retries)
+                break
+            await asyncio.sleep(5)
     evict_task = asyncio.create_task(_evict_loop())
     yield
     evict_task.cancel()
@@ -290,6 +292,5 @@ async def chat_completions(
 
 if __name__ == "__main__":
     import uvicorn
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-                        datefmt="%Y-%m-%dT%H:%M:%S%z")
+    logger.info("Starting Voice Bridge on port 8003...")
     uvicorn.run(app, host="0.0.0.0", port=8003, log_level="info")

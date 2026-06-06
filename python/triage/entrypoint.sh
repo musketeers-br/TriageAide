@@ -7,6 +7,7 @@ export FHIR_PASS="${FHIR_PASS:-SYS}"
 export FHIR_MCP_URL="http://localhost:8000/mcp"
 export TRIAGE_MCP_URL="http://localhost:8001/mcp"
 export CR_MCP_URL="http://localhost:8002/mcp"
+export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 
 if [ -n "$LANGSMITH_API_KEY" ]; then
   export LANGSMITH_TRACING="${LANGSMITH_TRACING:-true}"
@@ -37,33 +38,36 @@ else
 fi
 
 echo "Starting FHIR MCP Server on port 8000..."
-python3 fhir_server.py > /tmp/fhir_server.log 2>&1 &
+python3 fhir_server.py &
 FHIR_PID=$!
 
 echo "Starting Triage MCP Server on port 8001..."
-python3 triage_server.py > /tmp/triage_server.log 2>&1 &
+python3 triage_server.py &
 TRIAGE_PID=$!
 
 echo "Starting Clinical Reasoning MCP Server on port 8002..."
-python3 clinical_reasoning_server.py > /tmp/cr_server.log 2>&1 &
+python3 clinical_reasoning_server.py &
 CR_PID=$!
 
 echo "Waiting for MCP servers to be ready..."
 for port in 8000 8001 8002; do
-  for i in $(seq 1 30); do
+  READY=false
+  for i in $(seq 1 60); do
     if python3 -c "import requests; r=requests.get('http://localhost:$port/mcp', timeout=2); exit(0 if r.status_code in [200,405,406] else 1)" 2>/dev/null; then
       echo " Port $port ready"
+      READY=true
       break
     fi
-    if [ "$i" -eq 30 ]; then
-      echo "WARNING: MCP server on port $port not ready after 30s"
+    if [ "$i" -eq 60 ]; then
+      echo "ERROR: MCP server on port $port not ready after 60s — aborting"
+      exit 1
     fi
     sleep 1
   done
 done
 
 echo "Starting Voice Bridge on port 8003..."
-uvicorn voice_bridge:app --host 0.0.0.0 --port 8003 --log-level info --no-access-log > /tmp/voice_bridge.log 2>&1 &
+uvicorn voice_bridge:app --host 0.0.0.0 --port 8003 --log-level info --no-access-log &
 VOICE_PID=$!
 
 cleanup() {

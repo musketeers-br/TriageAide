@@ -3,6 +3,9 @@ import json
 import os
 import sqlite3
 import warnings
+from logging_config import setup_logging
+
+logger = setup_logging("cache")
 
 
 def _msg_type(msg):
@@ -57,22 +60,25 @@ def get_llm_cache(cache_namespace: str = ""):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
                 from langchain_community.cache import SQLiteCache
-            default_db_path = os.path.join(os.path.expanduser("~"), ".cache", "langchain_cache.db")
-            if cache_namespace:
-                base, ext = os.path.splitext(default_db_path)
-                default_db_path = f"{base}_{cache_namespace}{ext}"
-            db_path = os.getenv("LLM_CACHE_DB_PATH", default_db_path)
-            if cache_namespace and os.getenv("LLM_CACHE_DB_PATH"):
-                base, ext = os.path.splitext(db_path)
-                db_path = f"{base}_{cache_namespace}{ext}"
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            return _NormalizedSQLiteCache(database_path=db_path)
+                default_db_path = os.path.join(os.path.expanduser("~"), ".cache", "langchain_cache.db")
+                if cache_namespace:
+                    base, ext = os.path.splitext(default_db_path)
+                    default_db_path = f"{base}_{cache_namespace}{ext}"
+                db_path = os.getenv("LLM_CACHE_DB_PATH", default_db_path)
+                if cache_namespace and os.getenv("LLM_CACHE_DB_PATH"):
+                    base, ext = os.path.splitext(db_path)
+                    db_path = f"{base}_{cache_namespace}{ext}"
+                os.makedirs(os.path.dirname(db_path), exist_ok=True)
+                logger.info("LLM cache: sqlite | db=%s | namespace=%s", db_path, cache_namespace or "(none)")
+                return _NormalizedSQLiteCache(database_path=db_path)
         except ImportError:
-            print("WARNING: langchain-community not installed, LLM cache disabled")
+            logger.warning("langchain-community not installed, LLM cache disabled")
             return None
     elif cache_type == "memory":
         from langchain_core.caches import InMemoryCache
+        logger.info("LLM cache: in-memory")
         return InMemoryCache()
+    logger.debug("LLM cache: disabled (LLM_CACHE=%s)", cache_type or "(not set)")
     return None
 
 
@@ -167,6 +173,7 @@ def get_tool_cache(cache_namespace: str = ""):
     if cache_namespace and os.getenv("TOOL_CACHE_DB_PATH"):
         base, ext = os.path.splitext(db_path)
         db_path = f"{base}_{cache_namespace}{ext}"
+    logger.info("Tool cache: sqlite | db=%s | namespace=%s", db_path, cache_namespace or "(none)")
     return ToolCache(db_path)
 
 
@@ -191,7 +198,9 @@ def wrap_tools_with_cache(tools, tool_cache):
                 hit = None
                 all_args = None
             if hit is not None:
+                logger.debug("Tool cache HIT: %s", __name)
                 return hit
+            logger.debug("Tool cache MISS: %s", __name)
             result = await __original(*args, **kwargs)
             if all_args is not None:
                 try:

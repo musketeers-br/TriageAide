@@ -115,19 +115,22 @@ Open `.env` and fill in the required values:
 # Required
 OPENAI_API_KEY=sk-...your-openai-key-here...
 
+# Logging — DEBUG shows FHIR request/response payloads; INFO for quieter output
+LOG_LEVEL=DEBUG
+
 # Optional — LangSmith tracing
 LANGSMITH_API_KEY=ls-...your-langsmith-key...
 LANGSMITH_PROJECT=triage-aide
 LANGSMITH_TRACING=true
 
 # Optional — ElevenLabs voice interface
-VOICE_BRIDGE_SECRET=your-strong-random-secret   # generate: openssl rand -hex 32
-ELEVENLABS_AGENT_ID=                            # fill after creating the agent (Step 6)
-ELEVENLABS_WIDGET_ID=                           # fill after creating the agent (Step 6)
-VOICE_BRIDGE_URL=https://your-ngrok-url         # fill after starting ngrok (Step 5)
+VOICE_BRIDGE_SECRET=your-strong-random-secret # generate: openssl rand -hex 32
+ELEVENLABS_AGENT_ID= # fill after creating the agent (Step 6)
+ELEVENLABS_WIDGET_ID= # fill after creating the agent (Step 6)
+VOICE_BRIDGE_URL=https://your-ngrok-url # fill after starting ngrok (Step 5)
 ```
 
-> **Note:** `FHIR_BASE_URL`, `FHIR_USER`, and `FHIR_PASS` have correct defaults in `.env.example` and do not need to be changed for local development.
+> **Note:** `FHIR_BASE_URL`, `FHIR_USER`, `FHIR_PASS`, and `LOG_LEVEL` have correct defaults in `.env.example` and do not need to be changed for local development.
 
 Go back to the root directory:
 
@@ -638,16 +641,29 @@ Traces are automatically sent to LangSmith when the key is configured.
 
 ### Service Logs
 
+All modules use `logging_config.py` with the `LOG_LEVEL` env var (default: `DEBUG`). Logs go to both stderr (`docker compose logs`) and per-module files in `/tmp/`.
+
+| Log level | What you see |
+|---|---|
+| `DEBUG` | Full FHIR request/response payloads, LLM prompts/responses, MCP URLs, tool names, cache HIT/MISS |
+| `INFO` | Tool calls, agent creation, cache status, resource creation, errors |
+
 ```bash
 # All services (follow)
 docker compose logs -f triage
+
+# DEBUG lines only
+docker compose logs -f triage | grep DEBUG
 
 # Individual service logs (inside container)
 docker compose exec triage bash -c 'tail -f /tmp/fhir_server.log'
 docker compose exec triage bash -c 'tail -f /tmp/triage_server.log'
 docker compose exec triage bash -c 'tail -f /tmp/cr_server.log'
 docker compose exec triage bash -c 'tail -f /tmp/voice_bridge.log'
+docker compose exec triage bash -c 'tail -f /tmp/app.log'
 ```
+
+Change log level: set `LOG_LEVEL` in `.env` (e.g., `LOG_LEVEL=INFO` for quieter output).
 
 ---
 

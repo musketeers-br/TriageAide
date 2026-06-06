@@ -154,8 +154,8 @@ Text-based interaction in the terminal. Type `exit` to quit.
 
 ```
 python/triage/
-.env                        # Configuration (FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*) — NOT tracked in git
-.env.example                # Template without credentials
+.env # Configuration (FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*, LOG_LEVEL) — NOT tracked in git
+.env.example # Template without credentials
 requirements.txt            # Python dependencies
 Dockerfile                  # Python 3.12-slim image for the triage service
 entrypoint.sh               # Container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
@@ -165,10 +165,11 @@ seed_data/                  # FHIR JSON bundles for loading
     patient_joao_santos.json
     patient_ana_costa.json
     patient_roberto_lima.json
-fhir_server.py              # MCP Server 1 — FHIR CRUD (port 8000)
-triage_server.py            # MCP Server 2 — contextual triage (port 8001)
+fhir_server.py # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
-agent.py                    # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file handlers)
+agent.py # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
 app.py # Gradio chat UI with trace panel — Web
 voice_bridge.py # Voice Bridge — OpenAI-compatible API for ElevenLabs (port 8003)
@@ -220,6 +221,34 @@ README.md                   # This file
 | `identify_follow_up_tasks` | Follow-up tasks |
 
 ## Observability
+
+### Structured Logging
+
+All modules use `logging_config.py` for centralized logging with the `LOG_LEVEL` env var (default: `DEBUG`). Logs go to both stderr (visible via `docker compose logs`) and per-module files in `/tmp/`.
+
+| Log level | What you see |
+|---|---|
+| `DEBUG` | Full FHIR request/response payloads, LLM prompts/responses, MCP URLs, tool names, cache HIT/MISS |
+| `INFO` | Tool calls, agent creation, cache status, resource creation, errors |
+
+**View logs:**
+
+```bash
+# Live stderr (all modules mixed)
+docker compose logs triage -f
+
+# Live stderr — DEBUG lines only
+docker compose logs triage -f | grep DEBUG
+
+# Per-module log files (inside container)
+docker compose exec triage tail -f /tmp/fhir_server.log
+docker compose exec triage tail -f /tmp/triage_server.log
+docker compose exec triage tail -f /tmp/cr_server.log
+docker compose exec triage tail -f /tmp/voice_bridge.log
+docker compose exec triage tail -f /tmp/app.log
+```
+
+**Change log level:** Set `LOG_LEVEL` in `.env` (e.g., `LOG_LEVEL=INFO` for quieter output, `LOG_LEVEL=DEBUG` for full detail).
 
 ### Gradio Trace Panel
 
@@ -427,6 +456,8 @@ For live logging with structured output:
 docker compose exec triage bash -c 'tail -f /tmp/voice_bridge.log'
 ```
 
+If logs lack detail, verify `LOG_LEVEL=DEBUG` in `.env` and restart the triage container.
+
 ### Restart MCP servers manually
 
 ```bash
@@ -481,6 +512,6 @@ docker compose exec triage bash -c 'echo $VOICE_BRIDGE_SECRET | wc -c'
 - **MCP**: FastMCP with streamable-http transport
 - **Agent**: LangChain + langchain-mcp-adapters + OpenAI gpt-4o-mini
 - **UI**: Gradio ChatInterface with trace panel
-- **Observability**: LangSmith tracing (optional)
+- **Observability**: LangSmith tracing (optional) + structured logging (LOG_LEVEL)
 - **Language**: Python 3
 - **Deploy**: Docker Compose (2 services: iris + triage)

@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from cache import get_llm_cache, get_tool_cache, wrap_tools_with_cache
+from logging_config import setup_logging
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_agent
@@ -8,6 +9,8 @@ from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 
 load_dotenv(override=True)
+
+logger = setup_logging("agent")
 
 _ENGLISH_ONLY_RULE = (
     "# LANGUAGE RULE — MANDATORY\n\n"
@@ -171,7 +174,7 @@ def get_system_prompt(language: str = "auto", voice_mode: bool = False) -> str:
 
 
 def get_mcp_config():
-    return {
+    config = {
         "fhir_server": {
             "transport": "http",
             "url": os.getenv("FHIR_MCP_URL", "http://localhost:8000/mcp"),
@@ -185,20 +188,25 @@ def get_mcp_config():
             "url": os.getenv("CR_MCP_URL", "http://localhost:8002/mcp"),
         },
     }
+    logger.debug("MCP config: fhir=%s triage=%s cr=%s", config["fhir_server"]["url"], config["triage_server"]["url"], config["clinical_reasoning_server"]["url"])
+    return config
 
 
 async def create_triage_agent(language: str = "auto", voice_mode: bool = False, cache_namespace: str = ""):
+    logger.info("Creating triage agent | language=%s | voice_mode=%s | cache_ns=%s", language, voice_mode, cache_namespace or "(none)")
     client = MultiServerMCPClient(get_mcp_config())
 
     all_tools = await client.get_tools()
 
-    print(f"Total tools loaded: {len(all_tools)}")
+    logger.info("Total tools loaded: %d", len(all_tools))
+    for t in all_tools:
+        logger.debug("Tool available: %s", t.name)
 
     llm_cache = get_llm_cache(cache_namespace)
     tool_cache = get_tool_cache(cache_namespace)
 
     if llm_cache or tool_cache:
-        print(f"Cache enabled: LLM={os.getenv('LLM_CACHE')}, Tools={'sqlite' if tool_cache else 'off'}")
+        logger.info("Cache enabled: LLM=%s | Tools=%s", os.getenv("LLM_CACHE"), "sqlite" if tool_cache else "off")
 
     all_tools = wrap_tools_with_cache(all_tools, tool_cache)
 
@@ -213,6 +221,7 @@ async def create_triage_agent(language: str = "auto", voice_mode: bool = False, 
         system_prompt=get_system_prompt(language, voice_mode),
     )
 
+    logger.info("Triage agent created successfully")
     return agent, client
 
 
