@@ -154,7 +154,7 @@ Text-based interaction in the terminal. Type `exit` to quit.
 
 ```
 python/triage/
-.env # Configuration (FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*, LOG_LEVEL) — NOT tracked in git
+.env # Configuration (FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*, LOG_LEVEL, LLM_CACHE) — NOT tracked in git
 .env.example # Template without credentials
 requirements.txt            # Python dependencies
 Dockerfile                  # Python 3.12-slim image for the triage service
@@ -261,6 +261,35 @@ To enable [LangSmith](https://smith.langchain.com/) tracing for detailed agent i
 1. Add `LANGSMITH_API_KEY` to `.env`
 2. Set `LANGSMITH_TRACING=true` (enabled by default when the key is present)
 3. Set `LANGSMITH_PROJECT=triage-aide` (or your preferred project name)
+
+## LLM Cache
+
+The agent supports optional caching of LLM responses and tool results to reduce API costs and latency during development. Controlled by the `LLM_CACHE` env var in `.env`:
+
+| Value | Behavior |
+|---|---|
+| `off` | No caching (default) |
+| `memory` | In-memory cache (resets on restart) |
+| `sqlite` | SQLite-backed persistent cache (survives restarts) |
+
+```bash
+# Enable persistent SQLite cache (recommended for development)
+LLM_CACHE=sqlite
+
+# Enable in-memory cache (lost on restart)
+LLM_CACHE=memory
+
+# Disable caching
+LLM_CACHE=off
+```
+
+When `LLM_CACHE=sqlite`, two caches are active:
+- **LLM cache** — stores LLM completions keyed by normalized prompt + tool history (same patient input + same tool flow = cache hit)
+- **Tool cache** — stores MCP tool results keyed by tool name + arguments
+
+Cache files are stored at `~/.cache/langchain_cache.db` and `~/.cache/tool_cache.db` by default. Customize paths with `LLM_CACHE_DB_PATH` and `TOOL_CACHE_DB_PATH`. Each cache namespace (e.g., `gradio`, `voice`) gets its own SQLite file.
+
+Cache hit/miss events are logged at `DEBUG` level (set `LOG_LEVEL=DEBUG` to see them).
 
 ## Voice Integration (ElevenLabs) *(Roadmap — next step)*
 
