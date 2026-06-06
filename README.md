@@ -1,6 +1,6 @@
 # TriageAide — FHIR-First Pre-Consultation Triage
 
-TriageAide is an AI agent that retrieves a patient's FHIR clinical history, conducts a personalized pre-consultation triage via **chat or voice**, and writes structured triage results back to the FHIR server — so the physician receives a ready-made clinical summary before the appointment.
+TriageAide is an AI agent that retrieves a patient's FHIR clinical history, conducts a personalized pre-consultation triage via **chat**, and writes structured triage results back to the FHIR server — so the physician receives a ready-made clinical summary before the appointment.
 
 > "TriageAide first retrieves patient history from a FHIR server, builds contextual clinical understanding, and performs an adaptive pre-consultation triage that enriches and updates the longitudinal patient record."
 
@@ -12,7 +12,7 @@ This is **not** a generic chatbot that generates FHIR from scratch. It is an int
 2. **Contextual Triage** — asks intelligent questions based on real clinical history, not generic checklists
 3. **Bidirectional** — reads from AND writes back to the FHIR server
 4. **Longitudinal** — understands care continuity (e.g., "last visit 8 months ago — follow-up overdue")
-5. **Bilingual** — supports Brazilian Portuguese (pt-BR) and English (en-US) in both chat and voice
+5. **Bilingual** — supports Brazilian Portuguese (pt-BR) and English (en-US) in chat
 
 ---
 
@@ -20,7 +20,7 @@ This is **not** a generic chatbot that generates FHIR from scratch. It is an int
 
 1. **FHIR Query** — Agent retrieves Patient, Condition, MedicationRequest, Observation, AllergyIntolerance, Encounter
 2. **Contextual Triage** — With history in hand, generates intelligent, personalized questions
-3. **Interactive Conversation** — Chat/voice loop: agent asks one question at a time, patient responds, agent deepens
+3. **Interactive Conversation** — Chat loop: agent asks one question at a time, patient responds, agent deepens
 4. **Clinical Reasoning** — Cross-references FHIR history + new symptoms → risk assessment, priority suggestion
 5. **FHIR Update** — Creates Observation, QuestionnaireResponse, Flag, Task, Encounter back on the server
 
@@ -36,17 +36,17 @@ FHIR Server (InterSystems IRIS for Health)      ← iris container
 +-- clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
 |
 +-- agent.py (LangChain + OpenAI gpt-4o-mini) — core agent, bilingual system prompt
-+-- voice_bridge.py (FastAPI :8003) — OpenAI-compatible endpoint for ElevenLabs
-+-- voice_session.py — per-session state and language detection
++-- voice_bridge.py (FastAPI :8003) — OpenAI-compatible endpoint for ElevenLabs *(roadmap)*
++-- voice_session.py — per-session state and language detection *(roadmap)*
 +-- cli.py — interactive CLI interface
-+-- app.py (Gradio :7860) — web UI: Chat tab + Voice tab
++-- app.py (Gradio :7860) — web UI: Chat tab (+ Voice tab when ENABLE_VOICE_UI=true)
 |
 +-- entrypoint.sh — container entrypoint (waits for FHIR, loads seed, starts all services)
 ```
 
-### Voice Architecture
+### Voice Architecture *(Roadmap — next step)*
 
-```
+Voice interaction via ElevenLabs Conversational AI is implemented in the backend (`voice_bridge.py` on port 8003) but the UI tab is hidden by default in the MVP. To enable it, set `ENABLE_VOICE_UI=true` in `.env`. See [ElevenLabs Voice Integration](#elevenlabs-voice-integration-roadmap) for full setup instructions.
 [Patient browser / phone]
         |
         | WebSocket (ElevenLabs Conversational AI)
@@ -77,7 +77,7 @@ fhir_server.py      triage_server.py    clinical_reasoning_server.py
 
 Two independent Docker services share a `fhir-net` bridge network:
 - **iris** — IRIS for Health FHIR server
-- **triage** — Python app (MCP servers + Voice Bridge + Gradio UI)
+- **triage** — Python app (MCP servers + Voice Bridge *(roadmap)* + Gradio UI)
 
 ---
 
@@ -88,8 +88,8 @@ Two independent Docker services share a `fhir-net` bridge network:
 | [Docker](https://www.docker.com/products/docker-desktop) + Docker Compose | v2.20+ recommended |
 | OpenAI API key | Used by gpt-4o-mini for clinical reasoning |
 | (Optional) LangSmith API key | Agent tracing and debugging |
-| (Optional) ElevenLabs API key | Required only for voice interface |
-| (Optional) [ngrok](https://ngrok.com/) | Expose local voice bridge to ElevenLabs during development |
+| (Roadmap) ElevenLabs API key | Required only for voice interface — not needed for MVP |
+| (Roadmap) [ngrok](https://ngrok.com/) | Expose local voice bridge to ElevenLabs — not needed for MVP |
 
 ---
 
@@ -123,11 +123,14 @@ LANGSMITH_API_KEY=ls-...your-langsmith-key...
 LANGSMITH_PROJECT=triage-aide
 LANGSMITH_TRACING=true
 
-# Optional — ElevenLabs voice interface
-VOICE_BRIDGE_SECRET=your-strong-random-secret # generate: openssl rand -hex 32
-ELEVENLABS_AGENT_ID= # fill after creating the agent (Step 6)
-ELEVENLABS_WIDGET_ID= # fill after creating the agent (Step 6)
-VOICE_BRIDGE_URL=https://your-ngrok-url # fill after starting ngrok (Step 5)
+# Voice UI — show/hide the Voice tab (voice bridge runs regardless for testing)
+ENABLE_VOICE_UI=false
+
+# Roadmap — ElevenLabs voice interface (see "ElevenLabs Voice Integration" section)
+# VOICE_BRIDGE_SECRET=your-strong-random-secret # generate: openssl rand -hex 32
+# ELEVENLABS_AGENT_ID= # fill after creating the agent
+# ELEVENLABS_WIDGET_ID= # fill after creating the agent
+# VOICE_BRIDGE_URL=https://your-ngrok-url # fill after starting ngrok
 ```
 
 > **Note:** `FHIR_BASE_URL`, `FHIR_USER`, `FHIR_PASS`, and `LOG_LEVEL` have correct defaults in `.env.example` and do not need to be changed for local development.
@@ -158,7 +161,7 @@ This starts both services in the background. The `triage` container will:
 3. Start FHIR MCP Server on port 8000
 4. Start Triage MCP Server on port 8001
 5. Start Clinical Reasoning MCP Server on port 8002
-6. Start Voice Bridge on port 8003
+6. Start Voice Bridge on port 8003 *(roadmap — always runs, for testing)*
 7. Start Gradio UI on port 7860
 
 ### Step 5 — Verify services are running
@@ -180,16 +183,16 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:7860
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/mcp
 # Expected: 405 or 406 (server responds to GET, expects POST/SSE)
 
-# Voice Bridge
-curl -s http://localhost:8003/health
-# Expected: {"status":"ok","service":"triageaide-voice-bridge"}
-
 # IRIS FHIR API (direct)
 curl -s -o /dev/null -w "%{http_code}" \
-  -u _SYSTEM:SYS \
-  -H "Accept: application/fhir+json" \
-  http://localhost:32783/fhir/r4/metadata
+-u _SYSTEM:SYS \
+-H "Accept: application/fhir+json" \
+http://localhost:32783/fhir/r4/metadata
 # Expected: 200
+
+# Voice Bridge (roadmap — always runs for testing)
+curl -s http://localhost:8003/health
+# Expected: {"status":"ok","service":"triageaide-voice-bridge"}
 ```
 
 **Follow startup logs:**
@@ -201,8 +204,9 @@ Look for these lines indicating all services are up:
 ```
  Port 8000 ready
  Port 8001 ready
- Port 8002 ready
-Starting Voice Bridge on port 8003...
+ Port 8001 ready
+Port 8002 ready
+Starting Voice Bridge on port 8003... *(roadmap)*
 Starting Gradio UI on port 7860...
 Running on local URL: http://0.0.0.0:7860
 ```
@@ -245,20 +249,9 @@ Triagem para Roberto Lima
 - **Side-by-side** — chat on the left, trace panel on the right
 - **Compact** — trace events inline within the chat
 
-### Voice Interface (ElevenLabs)
+### Voice Interface (ElevenLabs) *(Roadmap)*
 
-See [ElevenLabs Voice Integration](#elevenlabs-voice-integration) for full setup instructions. Once configured:
-
-1. Open **http://localhost:7860** and click the **🎙️ Voice (ElevenLabs)** tab
-2. Click the voice widget button or the link to open the ElevenLabs agent
-3. Speak your patient request in Portuguese or English — the agent detects the language automatically:
-
-```
-"Olá, quero fazer triagem para Maria Silva"
-"Hi, I'd like to start triage for patient Roberto Lima"
-```
-
-4. Respond to the agent's spoken questions. The agent will query IRIS, ask contextual questions, and speak the clinical summary at the end.
+Voice interaction is implemented in the backend but the UI tab is hidden by default for the MVP. To enable it, set `ENABLE_VOICE_UI=true` in `.env` and restart the container. See [ElevenLabs Voice Integration](#elevenlabs-voice-integration-roadmap) for full setup instructions.
 
 ### Running Automated Dialogue Tests
 
@@ -321,7 +314,9 @@ docker compose exec triage bash -c \
 
 ---
 
-## ElevenLabs Voice Integration
+## ElevenLabs Voice Integration *(Roadmap — next step)*
+
+> **Status:** Backend implemented, UI hidden by default in the MVP. Enable with `ENABLE_VOICE_UI=true` in `.env`. For the full design specification, see [`doc/elevenlabs-integration.md`](doc/elevenlabs-integration.md).
 
 The voice interface uses ElevenLabs Conversational AI with a **Custom LLM** configuration. ElevenLabs handles all audio (STT + TTS), and the `voice_bridge.py` service provides the clinical intelligence by wrapping the existing LangChain agent.
 
@@ -333,11 +328,33 @@ Patient speaks → ElevenLabs STT → POST /v1/chat/completions → voice_bridge
 → voice_bridge.py strips markdown → SSE to ElevenLabs → TTS → patient hears response
 ```
 
-### Step 1 — Generate a voice bridge secret
+### Quick Test (no ElevenLabs account needed)
+
+The Voice Bridge runs on port 8003 regardless of `ENABLE_VOICE_UI`. Replace `<VOICE_BRIDGE_SECRET>` with the value from your `.env`:
+
+```bash
+# Streaming response (same format ElevenLabs uses)
+curl -X POST http://localhost:8003/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+-d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
+
+# Non-streaming (full JSON response)
+curl -X POST http://localhost:8003/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
+-d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":false}'
+```
+
+### Full Setup Instructions
+
+<details>
+<summary>Click to expand full ElevenLabs setup guide</summary>
+
+#### Step 1 — Generate a voice bridge secret
 
 ```bash
 openssl rand -hex 32
-# Example output: a3f7c2d1e8b4a9f6c3d7e2b5a8f1c4d7e0b3a6f9c2d5e8b1a4f7c0d3e6b9a2f5
 ```
 
 Add this to `python/triage/.env`:
@@ -345,37 +362,31 @@ Add this to `python/triage/.env`:
 VOICE_BRIDGE_SECRET=a3f7c2d1e8b4a9f6...
 ```
 
-> **Important:** `VOICE_BRIDGE_SECRET` must be set **only** in `python/triage/.env`. Do NOT set it in the `docker-compose.yml` `environment:` section — that overrides the `.env` file value and causes 401 errors. The `.env` file is loaded via `env_file:` in docker-compose and is the single source of truth for this variable.
+> **Important:** `VOICE_BRIDGE_SECRET` must be set **only** in `python/triage/.env`. Do NOT set it in the `docker-compose.yml` `environment:` section — that overrides the `.env` file value and causes 401 errors.
 
-### Step 2 — Expose the voice bridge publicly (local development)
+#### Step 2 — Expose the voice bridge publicly (local development)
 
 ElevenLabs needs to reach your voice bridge over HTTPS. The project includes a `start_tunnel.sh` script at the repo root that creates a stable tunnel with a fixed subdomain.
 
 **Using `start_tunnel.sh` (localtunnel with fixed subdomain):**
 
 ```bash
-# From the project root (host machine)
 ./start_tunnel.sh
 ```
-
-This uses [localtunnel](https://github.com/localtunnel/localtunnel) to expose port 8003 at `https://dark-ways-itch.loca.lt`. The script automatically retries if the subdomain is temporarily unavailable. Requires Node.js + npm.
 
 **Alternative: ngrok**
 
 ```bash
-# Install ngrok if needed: https://ngrok.com/download
 ngrok http 8003
 ```
 
 **After starting the tunnel:**
 
 1. Update your `.env`: `VOICE_BRIDGE_URL=https://dark-ways-itch.loca.lt` (or your ngrok URL)
-2. In the ElevenLabs dashboard, set the Custom LLM base URL to `https://dark-ways-itch.loca.lt/v1` (ElevenLabs appends `/chat/completions` automatically)
+2. In the ElevenLabs dashboard, set the Custom LLM base URL to `https://dark-ways-itch.loca.lt/v1`
 3. Verify the tunnel: `curl https://<tunnel-url>/health`
 
-> **Production note:** For production deployments, use a static public URL (cloud VM, reverse proxy with TLS) instead of a tunnel.
-
-### Step 3 — Create the ElevenLabs agent
+#### Step 3 — Create the ElevenLabs agent
 
 1. Go to [elevenlabs.io/conversational-ai](https://elevenlabs.io/conversational-ai) and log in
 2. Click **Create Agent**
@@ -386,105 +397,56 @@ ngrok http 8003
 |---|---|
 | **LLM URL** | `https://<your-ngrok-or-public-url>/v1/chat/completions` |
 | **Authentication** | Bearer token → paste your `VOICE_BRIDGE_SECRET` |
-| **System Prompt** | *(leave blank — the bridge sends the full prompt in messages)* |
+| **System Prompt** | *(leave blank — the bridge sends the full prompt)* |
 | **First Message** | `Olá! Sou o assistente de triagem do TriageAide. Por favor, me diga seu nome para começarmos.` |
-| **Voice** | Choose a Brazilian Portuguese voice (e.g., search for "Portuguese" in the voice library) |
+| **Voice** | Choose a Brazilian Portuguese voice |
 | **Language** | Enable auto-detection; add Portuguese (Brazil) and English (US) |
-| **Interruption sensitivity** | Medium |
-| **Turn end detection** | Silence-based, ~1.5 seconds |
 
-5. Click **Save** and note the **Agent ID** shown in the URL or settings page
+5. Click **Save** and note the **Agent ID**
 
-> **Tip:** You can also import the pre-configured agent from `11labs/myagent.json` using the ElevenLabs dashboard Import/Export feature. See [ElevenLabs Agent Configuration Reference](#elevenlabs-agent-configuration-reference) below.
+> **Tip:** You can also import the pre-configured agent from `11labs/myagent.json`.
 
-### Step 4 — Configure the Agent ID in .env
+#### Step 4 — Configure the Agent ID in .env
 
 ```bash
-# Get the widget embed ID from: Agent settings → Share → Copy widget ID
 ELEVENLABS_AGENT_ID=agent_xxxxxxxxxx
-ELEVENLABS_WIDGET_ID=agent_xxxxxxxxxx   # usually the same value
+ELEVENLABS_WIDGET_ID=agent_xxxxxxxxxx
+ENABLE_VOICE_UI=true
 ```
 
-Restart the triage container to pick up the new env vars:
+Restart: `docker compose restart triage`
 
-```bash
-docker compose restart triage
-```
+#### Step 5 — Test the voice integration
 
-After restart, open **http://localhost:7860** → **🎙️ Voice tab** — you should see the ElevenLabs voice widget embedded in the page.
-
-### Step 5 — Test the voice integration
-
-**Quick test via curl (no ElevenLabs account needed):**
-
-Replace `<VOICE_BRIDGE_SECRET>` with the value from your `python/triage/.env` file.
-
-**Local (direct to container):**
-
-```bash
-# Streaming response (same format ElevenLabs uses)
-curl -X POST http://localhost:8003/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
-  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
-
-# Non-streaming (full JSON response)
-curl -X POST http://localhost:8003/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
-  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":false}'
-```
-
-**Via tunnel (same URL ElevenLabs calls):**
-
-```bash
-curl -X POST https://<your-tunnel-url>/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <VOICE_BRIDGE_SECRET>" \
-  -d '{"messages":[{"role":"user","content":"Iniciar triagem para Maria Silva"}],"stream":true}'
-```
-
-Expected: JSON response with `choices[0].message.content` containing the agent's first question in Portuguese.
-
-**Full voice test:**
-
-1. Open the 🎙️ Voice tab in Gradio or the ElevenLabs test interface in the dashboard
+1. Open the 🎙️ Voice tab in Gradio
 2. Say: *"Olá, quero fazer triagem para Maria Silva"*
-3. The agent should respond in Portuguese, confirm the patient name, and begin asking triage questions
-4. Answer 3–5 questions and listen for the spoken clinical summary at the end
+3. The agent should respond in Portuguese and begin asking triage questions
 
 **Language switching test:**
-
 - Start with *"Hi, triage for Roberto Lima"* → agent responds in English
 - Start with *"Olá, triagem para João Santos"* → agent responds in Portuguese
 
 ### Bilingual Support
 
 The agent automatically detects language from the patient's speech:
-- **Portuguese detected** (any pt-BR token like "tenho", "estou", "triagem", "dor"...) → all responses in pt-BR
+- **Portuguese detected** → all responses in pt-BR
 - **English detected** → all responses in en-US
-- Language is **sticky per session** — once set, it stays for the entire conversation
+- Language is **sticky per session**
 
 ### ElevenLabs Agent Configuration Reference
 
-The `11labs/myagent.json` file is an exported configuration of the ElevenLabs Conversational AI agent. It contains the full agent setup for reference, re-import, or version control.
+The `11labs/myagent.json` file is an exported configuration of the ElevenLabs Conversational AI agent.
 
 **Key fields:**
 
 | Field | Value | Description |
 |---|---|---|
 | `agent_id` | `agent_7001kt5n1cv6fj687wvbaxy81r0y` | Matches `ELEVENLABS_AGENT_ID` in `.env` |
-| `agent.first_message` | `"Olá! Como posso ajudar?"` | Initial greeting spoken when the conversation starts |
-| `agent.language` | `"pt-br"` | Default language (the Voice Bridge also auto-detects) |
-| `prompt.llm` | `"custom-llm"` | Tells ElevenLabs to call the Voice Bridge instead of a built-in model |
-| `custom_llm.url` | `"https://dark-ways-itch.loca.lt/v1"` | **Base URL** of the Voice Bridge — ElevenLabs appends `/chat/completions` automatically |
-| `custom_llm.api_type` | `"chat_completions"` | Determines the endpoint path appended to the base URL |
-| `custom_llm.request_headers.Authorization` | `secret_id` | References the `VOICE_BRIDGE_SECRET` stored in ElevenLabs secrets vault |
-| `tts.model_id` | `"eleven_flash_v2_5"` | TTS model — optimized for low latency |
-| `tts.voice_id` | `"KHmfNHtEjHhLK9eER20w"` | Selected Portuguese-compatible voice |
-| `turn.turn_timeout` | `7` | Seconds of silence before the agent responds |
-| `conversation.max_duration_seconds` | `600` | Maximum conversation length (10 minutes) |
-| `timezone` | `"America/Sao_Paulo"` | Agent timezone |
+| `agent.first_message` | `"Olá! Como posso ajudar?"` | Initial greeting |
+| `prompt.llm` | `"custom-llm"` | Tells ElevenLabs to call the Voice Bridge |
+| `custom_llm.url` | `"https://dark-ways-itch.loca.lt/v1"` | Base URL — ElevenLabs appends `/chat/completions` |
+| `tts.model_id` | `"eleven_flash_v2_5"` | TTS model — low latency |
+| `turn.turn_timeout` | `7` | Seconds of silence before agent responds |
 
 **Custom LLM URL format:**
 
@@ -494,6 +456,8 @@ The `11labs/myagent.json` file is an exported configuration of the ElevenLabs Co
 | `https://abc123.ngrok-free.app/v1` | `https://abc123.ngrok-free.app/v1/chat/completions` |
 
 > **Important:** When changing the tunnel URL, update `custom_llm.url` in the ElevenLabs dashboard **and** `VOICE_BRIDGE_URL` in `.env`.
+
+</details>
 
 ---
 
@@ -518,7 +482,7 @@ python3 triage_server.py
 # Terminal 3: Clinical Reasoning MCP Server
 python3 clinical_reasoning_server.py
 
-# Terminal 4: Voice Bridge
+# Terminal 4: Voice Bridge *(roadmap)*
 VOICE_BRIDGE_SECRET=changeme uvicorn voice_bridge:app --host 0.0.0.0 --port 8003
 
 # Terminal 5: Gradio UI
@@ -546,17 +510,17 @@ TriageAide/
     ├── requirements.txt            # Python dependencies
     ├── Dockerfile                  # Python 3.12-slim image for triage service
     ├── entrypoint.sh               # Container boot: wait FHIR → seed → start all
-    ├── start_servers.sh            # Manual start script (MCP + Voice Bridge + Gradio)
-    │
-    ├── agent.py                    # Core agent: get_system_prompt(), create_triage_agent()
-    ├── voice_bridge.py             # FastAPI Voice Bridge (port 8003) — ElevenLabs Custom LLM
-    ├── voice_session.py            # Per-session state, language detection, TTL eviction
+├── start_servers.sh # Manual start script (MCP + Voice Bridge + Gradio)
+│
+├── agent.py # Core agent: get_system_prompt(), create_triage_agent()
+├── voice_bridge.py # FastAPI Voice Bridge (port 8003) *(roadmap)*
+├── voice_session.py # Per-session state, language detection, TTL eviction *(roadmap)*
     │
     ├── fhir_server.py              # MCP Server 1 — FHIR CRUD (port 8000)
     ├── triage_server.py            # MCP Server 2 — Contextual triage (port 8001)
     ├── clinical_reasoning_server.py # MCP Server 3 — Clinical reasoning (port 8002)
     │
-    ├── app.py                      # Gradio web UI: Chat tab + Voice tab (port 7860)
+├── app.py # Gradio web UI: Chat tab (+ Voice tab when ENABLE_VOICE_UI=true)
     ├── cli.py                      # Interactive CLI interface
     │
     ├── seed_data.py                # Load / clean / list test patients
@@ -671,11 +635,11 @@ Change log level: set `LOG_LEVEL` in `.env` (e.g., `LOG_LEVEL=INFO` for quieter 
 
 | Host Port | Container Port | Service |
 |---|---|---|
-| 7860 | 7860 | Gradio Web UI (Chat + Voice tabs) |
+| 7860 | 7860 | Gradio Web UI (Chat tab + Voice tab when ENABLE_VOICE_UI=true) |
 | 8000 | 8000 | FHIR MCP Server |
 | 8001 | 8001 | Triage MCP Server |
 | 8002 | 8002 | Clinical Reasoning MCP Server |
-| 8003 | 8003 | Voice Bridge (ElevenLabs Custom LLM endpoint) |
+| 8003 | 8003 | Voice Bridge *(roadmap — always runs for testing)* |
 | 32783 | 52773 | FHIR API — IRIS for Health (direct access) |
 
 ---
@@ -687,9 +651,9 @@ Change log level: set `LOG_LEVEL` in `.env` (e.g., `LOG_LEVEL=INFO` for quieter 
 | FHIR Server | InterSystems IRIS for Health Community Edition |
 | MCP Servers | FastMCP with streamable-http transport |
 | Agent | LangChain + langchain-mcp-adapters + OpenAI gpt-4o-mini |
-| Voice Bridge | FastAPI + uvicorn — OpenAI-compatible endpoint |
-| Voice I/O | ElevenLabs Conversational AI (STT + TTS + WebSocket) |
-| Chat UI | Gradio with Chat + Voice tabs and real-time trace panel |
+| Voice Bridge | FastAPI + uvicorn — OpenAI-compatible endpoint *(roadmap)* |
+| Voice I/O | ElevenLabs Conversational AI (STT + TTS + WebSocket) *(roadmap)* |
+| Chat UI | Gradio with Chat tab (+ Voice tab via ENABLE_VOICE_UI) and real-time trace panel |
 | Observability | LangSmith tracing (optional) |
 | Language | Python 3.12 |
 | Deploy | Docker Compose (2 services: iris + triage) |
@@ -751,7 +715,7 @@ docker compose exec triage bash -c \
 2. Check the triage log: `docker compose logs triage`
 3. Verify port mapping: `docker inspect triage-app | grep -A5 Ports`
 
-### Voice Bridge not responding
+### Voice Bridge not responding *(Roadmap)*
 
 ```bash
 # Check if it started
@@ -771,7 +735,7 @@ docker compose exec triage bash -c \
    && uvicorn voice_bridge:app --host 0.0.0.0 --port 8003 >> /tmp/voice_bridge.log 2>&1 &'
 ```
 
-### ElevenLabs gets 401 Unauthorized
+### ElevenLabs gets 401 Unauthorized *(Roadmap)*
 
 The `VOICE_BRIDGE_SECRET` in your `.env` must match exactly what you configured as the Bearer token in the ElevenLabs agent settings. Re-check both values:
 
@@ -788,14 +752,14 @@ docker compose exec triage bash -c 'echo $VOICE_BRIDGE_SECRET | wc -c'
 
 The `.env` file must be the **only** source of `VOICE_BRIDGE_SECRET`. Do not duplicate it in the `docker-compose.yml` `environment:` section, because `environment:` takes precedence over `env_file:` and silently overrides the value.
 
-### ElevenLabs can't reach the voice bridge
+### ElevenLabs can't reach the voice bridge *(Roadmap)*
 
 - Make sure the tunnel is running: `./start_tunnel.sh` (or `ngrok http 8003`)
 - If using `start_tunnel.sh`, verify the fixed URL: `curl https://dark-ways-itch.loca.lt/health`
 - The ngrok URL changes every restart (free plan). Update `VOICE_BRIDGE_URL` in `.env` and in the ElevenLabs agent configuration.
 - For persistent URLs, use [ngrok's static domains](https://ngrok.com/blog-post/free-static-domains-ngrok-users) (free tier: 1 static domain).
 
-### Agent responds in the wrong language
+### Agent responds in the wrong language *(Roadmap — voice only)*
 
 Language detection is heuristic-based. If the agent responds in the wrong language, check `voice_bridge.log` for the detected language. You can override by adding an explicit instruction in your first message: *"Please respond in English"* or *"Por favor, responda em português"*.
 

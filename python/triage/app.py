@@ -14,6 +14,8 @@ from logging_config import setup_logging
 
 load_dotenv(override=True)
 
+_show_voice_ui = os.getenv("ENABLE_VOICE_UI", "false").lower() in ("1", "true", "yes")
+
 logger = setup_logging("app", "app.log")
 
 _agent_instance = None
@@ -371,7 +373,7 @@ def _apply_trace_event(event, chat_history, trace_history, compact, st):
                 "title": f"{icon} → {tool_name}",
                 "status": "pending",
                 "id": f"tool-{run_id}",
-                    "parent_id": f"step-{step_num}" if step_num else "",
+                "parent_id": f"step-{step_num}" if step_num else "",
                 "log": input_summary,
             },
         )
@@ -575,12 +577,11 @@ def main():
     _el_head = (
         '<script src="https://unpkg.com/@elevenlabs/convai-widget-embed"'
         ' async type="text/javascript"></script>'
-    )
+    ) if _show_voice_ui else ""
 
     with gr.Blocks(
         fill_height=True,
         title="TriageAide — FHIR-First Pre-Consultation Triage",
-        head=_el_head,
     ) as demo:
         gr.Markdown("# 🏥 TriageAide — FHIR-First Pre-Consultation Triage")
 
@@ -641,6 +642,7 @@ def main():
                         )
                         clear_trace = gr.Button("Clear Trace", size="sm")
 
+        if _show_voice_ui:
             with gr.Tab("🎙️ Voice (ElevenLabs)"):
                 gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
                 gr.Markdown(
@@ -664,16 +666,12 @@ def main():
                             '<strong>Carregar Widget</strong>.</p>'
                             '</div>'
                         )
-                    # Primary: custom element (works when head= script loads successfully)
-                    # Fallback iframe is also shown below if the custom element doesn't render
                     local_bridge = "http://localhost:8003"
                     iframe_url = f"{local_bridge}/widget?agent_id={agent_id}"
                     return (
-                        # Custom element — rendered by the globally-loaded ElevenLabs script
                         '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;">'
                         f'<elevenlabs-convai agent-id="{agent_id}" '
                         'style="width:100%;max-width:560px;min-height:420px;"></elevenlabs-convai>'
-                        # Separator + iframe fallback (opens in same page area)
                         '<details style="width:100%;max-width:560px;">'
                         '<summary style="cursor:pointer;color:#6b7280;font-size:13px;padding:4px 0;">'
                         '🔄 Widget not showing? Try the standalone version / Widget não apareceu? Tente a versão standalone'
@@ -703,20 +701,20 @@ def main():
 
                 with gr.Accordion("⚙️ Setup Instructions / Instruções de Configuração", open=not bool(_el_agent_id)):
                     gr.Markdown(f"""
-**English — Custom LLM setup:**
-1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
-2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
-3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-4. Select a Brazilian Portuguese voice and enable **language auto-detection**
-5. Copy the Agent ID from the URL and paste it in the field above
+                    **English — Custom LLM setup:**
+                    1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
+                    2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
+                    3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
+                    4. Select a Brazilian Portuguese voice and enable **language auto-detection**
+                    5. Copy the Agent ID from the URL and paste it in the field above
 
-**Português — Configuração do Custom LLM:**
-1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
-2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
-3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
-5. Copie o Agent ID da URL e cole no campo acima
-""")
+                    **Português — Configuração do Custom LLM:**
+                    1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
+                    2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
+                    3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
+                    4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
+                    5. Copie o Agent ID da URL e cole no campo acima
+                    """)
 
                 with gr.Row():
                     gr.Markdown(
@@ -772,6 +770,7 @@ def main():
         server_port=7860,
         css=CSS,
         theme=gr.themes.Soft(),
+        head=_el_head,
     )
     logger.info("Gradio UI launched on port 7860")
 
