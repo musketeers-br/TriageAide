@@ -218,9 +218,9 @@ Extract structured symptom data from this response. Return JSON with raw_respons
 
 @mcp.tool()
 async def check_red_flags(
-    symptoms: list,
-    conditions: list,
-    medications: list = None,
+    symptoms: list | str,
+    conditions: list | str,
+    medications: list | str | None = None,
 ) -> str:
     """Checks warning signs (red flags) by cross-referencing current symptoms with existing conditions and active medications using clinical reasoning. Detects drug-symptom interactions. symptoms = JSON list of identified symptoms (from analyze_patient_response). conditions = JSON list of active conditions. medications = JSON list of medications (optional but recommended for drug interaction detection)."""
     logger.info("check_red_flags | symptoms=%d | conditions=%d | medications=%s", 
