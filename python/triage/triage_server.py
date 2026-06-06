@@ -149,7 +149,7 @@ Return a JSON object:
 @mcp.tool()
 async def get_next_triage_question(
     patient_context: str,
-    covered_topics: list[str] = None,
+    covered_topics: list[str] = [],
     patient_initial_message: str = "",
 ) -> str:
     """Returns the NEXT triage question (one at a time) based on FHIR history, already covered topics, and optionally the patient's initial message. If the initial message already states the reason for visit, the tool skips the generic opener and goes directly to condition-specific questions. patient_context = JSON with patient data. covered_topics = list of already answered topics. patient_initial_message = the patient's first message to the agent (optional)."""
@@ -159,7 +159,7 @@ async def get_next_triage_question(
     except json.JSONDecodeError:
         return json.dumps({"error": "patient_context must be valid JSON"}, ensure_ascii=False)
 
-    covered = covered_topics if covered_topics else []
+    covered = covered_topics or []
 
     ctx_summary = json.dumps(ctx, ensure_ascii=False)[:2000]
     user_prompt = f"""Patient FHIR context:
