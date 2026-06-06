@@ -1,5 +1,11 @@
 # FHIR-First AI Triage: How InterSystems IRIS, MCP, and Generative AI Transform Pre-Consultation Care
 
+*An AI agent reads the FHIR patient record before the consultation, asks the right questions based on what it already knows, detects critical red flags, and writes its findings back — so the physician arrives prepared.*
+
+**Tags:** #InterSystems IRIS for Health #FHIR #Artificial Intelligence (AI) #Generative AI (GenAI) #Large Language Model (LLM) #Python #Docker #Contest #Interoperability
+
+---
+
 ## The Problem Nobody Sees
 
 Before a patient walks into a consultation room, a critical failure has already occurred: **nobody read their medical history.** The physician has 15 minutes. The patient repeats their conditions, medications, and allergies for the third time that year. Red flags—bleeding on warfarin, chest pain with heart failure, suicidal ideation with depression—go unasked until it's too late, or not at all.
@@ -7,6 +13,8 @@ Before a patient walks into a consultation room, a critical failure has already 
 This isn't a technology gap. The data exists. It lives in FHIR repositories like InterSystems IRIS for Health, holding longitudinal patient records with conditions, medications, lab results, allergies, and encounter history. The gap is **intelligence at the point of care**—an agent that reads the record *before* the visit, asks the right questions based on what it already knows, and writes its findings back so the physician arrives prepared.
 
 That's what TriageAide does.
+
+This project implements the **Conversational FHIR Triage Assistant** (suggested task #10 from the [AI Agents for FHIR contest](https://openexchange.intersystems.com/contest/46)) — an AI agent that asks patients structured triage questions, stores answers as `QuestionnaireResponse`, and creates a clinician handoff summary with coded observations, flags, and follow-up tasks.
 
 ## FHIR as Living Clinical Memory
 
@@ -21,14 +29,16 @@ TriageAide separates concerns into three MCP (Model Context Protocol) servers, e
 | MCP Server | Port | Tools | Role |
 |---|---|---|---|
 | **FHIRServer** | :8000 | 12 | CRUD operations against IRIS FHIR R4 |
-| **TriageServer** | :8001 | 4 | Contextual question generation, symptom extraction, red flag detection |
+| **TriageServer** | :8001 | 5 | Contextual question generation, symptom extraction, red flag detection |
 | **ClinicalReasoningServer** | :8002 | 1 | Comprehensive clinical assessment (risk + priority + summary + follow-up) |
 
-A LangChain agent (powered by OpenAI gpt-4o-mini) orchestrates these servers through 17 tools, following a four-step mandatory workflow: **FHIR Query → Contextual Triage → Clinical Assessment → FHIR Update.**
+A LangChain agent (powered by OpenAI gpt-4o-mini) orchestrates these servers through 18 tools, following a five-step mandatory workflow: **FHIR Query → Contextual Triage → Red Flags Check → Clinical Reasoning → FHIR Update.**
 
 The MCP architecture matters. Each server is independently deployable, testable, and replaceable. The FHIR server can serve any agent, not just this triage agent. The clinical reasoning server could power a different workflow—risk stratification, care gap detection—without touching the FHIR layer. **MCP decouples tool access from agent logic.**
 
 A Gradio web UI provides the patient-facing chat interface alongside a real-time **trace panel** that reveals every step the agent takes—every LLM reasoning call, every tool invocation with arguments and results, mapped to the workflow steps. This is what we'll walk through.
+
+![TriageAide Gradio UI — chat on the left, agent trace on the right](screenshot_blank_ui.png)
 
 ---
 
@@ -53,44 +63,46 @@ The trace panel immediately lights up. The agent doesn't ask "How can I help you
 ```
 🧠 LLM #1 → search_patients
 
-    → search_patients(name="Joao Santos")
-    ← search_patients · 1 patient(s) found (0.1s)
-      Result: {"total": 1, "patients": [{"id": "2196", "name": "Joao Santos",
-               "gender": "male", "birthDate": "1954-11-20"}]}
+→ search_patients(name="Joao Santos")
+← search_patients · 1 patient(s) found (0.1s)
+Result: {"total": 1, "patients": [{"id": "2196", "name": "Joao Santos",
+"gender": "male", "birthDate": "1954-11-20"}]}
 
 🧠 LLM #2 → get_patient, get_patient_conditions, get_patient_medications,
-              get_patient_observations, get_patient_allergies, get_patient_encounters
+get_patient_observations, get_patient_allergies, get_patient_encounters
 
-    → get_patient_conditions(patient_id=2196)
-    ← get_patient_conditions · 5 conditions retrieved (0.4s)
-      Result: [{"display": "Chronic heart failure", "icd10": "I50", "status": "active"},
-               {"display": "Atrial fibrillation", "icd10": "I48", "status": "active"},
-               {"display": "Type 2 diabetes", "icd10": "E11", "status": "active"},
-               {"display": "Hypertension", "icd10": "I10", "status": "active"},
-               {"display": "CKD stage 3", "icd10": "N18.3", "status": "active"}]
+→ get_patient_conditions(patient_id=2196)
+← get_patient_conditions · 5 conditions retrieved (0.4s)
+Result: [{"display": "Chronic heart failure", "icd10": "I50", "status": "active"},
+{"display": "Atrial fibrillation", "icd10": "I48", "status": "active"},
+{"display": "Type 2 diabetes", "icd10": "E11", "status": "active"},
+{"display": "Hypertension", "icd10": "I10", "status": "active"},
+{"display": "CKD stage 3", "icd10": "N18.3", "status": "active"}]
 
-    → get_patient_medications(patient_id=2196)
-    ← get_patient_medications · 4 medications retrieved (0.3s)
-      Result: [{"medication": "Warfarin 5mg", "status": "active"},
-               {"medication": "Metformin 1000mg", "status": "active"},
-               {"medication": "Enalapril 20mg", "status": "active"},
-               {"medication": "Furosemide 40mg", "status": "active"}]
+→ get_patient_medications(patient_id=2196)
+← get_patient_medications · 4 medications retrieved (0.3s)
+Result: [{"medication": "Warfarin 5mg", "status": "active"},
+{"medication": "Metformin 1000mg", "status": "active"},
+{"medication": "Enalapril 20mg", "status": "active"},
+{"medication": "Furosemide 40mg", "status": "active"}]
 
-    → get_patient_observations(patient_id=2196)
-    ← get_patient_observations · 5 observations retrieved (0.4s)
-      Result: [{"display": "HbA1c", "value": 7.1},
-               {"display": "INR", "value": 2.8},
-               {"display": "Creatinine", "value": 2.1, "interpretation": "H"},
-               {"display": "BNP", "value": 450, "interpretation": "H"},
-               {"display": "Ejection fraction", "value": 35, "interpretation": "L"}]
+→ get_patient_observations(patient_id=2196)
+← get_patient_observations · 5 observations retrieved (0.4s)
+Result: [{"display": "HbA1c", "value": 7.1},
+{"display": "INR", "value": 2.8},
+{"display": "Creatinine", "value": 2.1, "interpretation": "H"},
+{"display": "BNP", "value": 450, "interpretation": "H"},
+{"display": "Ejection fraction", "value": 35, "interpretation": "L"}]
 
-    → get_patient_allergies(patient_id=2196)
-    ← get_patient_allergies · 1 allergies retrieved (0.4s)
-      Result: [{"substance": "Aspirin", "criticality": "high",
-               "reactions": [{"manifestation": "Asthma exacerbation", "severity": "severe"}]}]
+→ get_patient_allergies(patient_id=2196)
+← get_patient_allergies · 1 allergies retrieved (0.4s)
+Result: [{"substance": "Aspirin", "criticality": "high",
+"reactions": [{"manifestation": "Asthma exacerbation", "severity": "severe"}]}]
 ```
 
 Seven FHIR calls, all against the InterSystems IRIS FHIR server, in under 2 seconds. The agent now knows Joao's full clinical picture—**before saying a single word to the patient**. This is the FHIR-First principle in action.
+
+![Joao Santos — STEP 1 (FHIR Query) and STEP 2 (Triage Question) in the trace panel](screenshot_joao_step1_2.png)
 
 ### STEP 2 — Contextual Triage
 
@@ -99,14 +111,14 @@ Now the agent uses the **TriageServer MCP** to generate a context-aware question
 ```
 🧠 LLM #3 → get_next_triage_question
 
-    → get_next_triage_question(
-        patient_context={full FHIR history},
-        covered_topics=[],
-        patient_initial_message="Hi, I'm Joao Santos, I've been having trouble
-                                 breathing at night and my legs are swollen")
-    ← get_next_triage_question · 1 question (0 remaining) (1.3s)
-      Result: "Have you noticed any chest pain or discomfort along
-               with your breathing issues?"
+→ get_next_triage_question(
+patient_context={full FHIR history},
+covered_topics=[],
+patient_initial_message="Hi, I'm Joao Santos, I've been having trouble
+breathing at night and my legs are swollen")
+← get_next_triage_question · 1 question (3 remaining) (1.3s)
+Result: "Have you noticed any chest pain or discomfort along
+with your breathing issues?"
 ```
 
 Notice what happened: the `patient_initial_message` parameter passes Joao's own words. The LLM-powered triage tool sees "trouble breathing at night and swollen legs" and **skips the generic opener**. It doesn't ask "How are you feeling today?" It goes straight to red-flag screening for a heart failure patient: chest pain.
@@ -122,15 +134,15 @@ Joao responds:
 The agent processes this through two tools in sequence:
 
 ```
-    → analyze_patient_response(
-        patient_response="Yes, I've been noticing some bruising easily and
-                          my gums bleed when I brush my teeth",
-        patient_context={full FHIR history})
-    ← analyze_patient_response · 2 symptom(s), severity=moderate (2.7s)
-      Result: {"identified_symptoms": [
-                 {"symptom": "easy bruising", "category": "general", "severity": "moderate"},
-                 {"symptom": "gum bleeding", "category": "general", "severity": "moderate"}],
-               "overall_severity": "moderate"}
+→ analyze_patient_response(
+patient_response="Yes, I've been noticing some bruising easily and
+my gums bleed when I brush my teeth",
+patient_context={full FHIR history})
+← analyze_patient_response · 2 symptom(s), severity=moderate (2.7s)
+Result: {"identified_symptoms": [
+{"symptom": "easy bruising", "category": "general", "severity": "moderate"},
+{"symptom": "gum bleeding", "category": "general", "severity": "moderate"}],
+"overall_severity": "moderate"}
 ```
 
 The symptom extractor—also LLM-powered—correctly identifies "easy bruising" and "gum bleeding" as distinct symptoms with moderate severity. It handles synonyms ("bruising easily" → "easy bruising") and negation (if Joao had said "no chest pain," it would be marked absent).
@@ -140,31 +152,31 @@ The symptom extractor—also LLM-powered—correctly identifies "easy bruising" 
 Then comes the critical moment. The agent runs `check_red_flags` on the **ClinicalReasoningServer**, cross-referencing the new symptoms with the FHIR-retrieved conditions and medications:
 
 ```
-    → check_red_flags(
-        symptoms=[{"symptom":"easy bruising"}, {"symptom":"gum bleeding"}],
-        conditions=[Chronic heart failure, Atrial fibrillation, Diabetes, Hypertension, CKD],
-        medications=[Warfarin 5mg, Metformin 1000mg, Enalapril 20mg, Furosemide 40mg])
-    ← check_red_flags · 2 alert(s) ⚠️ CRITICAL (2.9s)
-      Result: {
-        "alerts": [
-          {"red_flag": "Bleeding symptoms with anticoagulant use",
-           "symptom": "gum bleeding",
-           "related_condition_or_medication": "Warfarin 5mg",
-           "risk": "critical",
-           "explanation": "The patient is experiencing gum bleeding while on warfarin,
-                          which poses a significant risk of serious bleeding complications
-                          requiring immediate attention."},
-          {"red_flag": "Bleeding symptoms with anticoagulant use",
-           "symptom": "easy bruising",
-           "related_condition_or_medication": "Warfarin 5mg",
-           "risk": "elevated",
-           "explanation": "Easy bruising in a patient taking warfarin indicates a
-                          potential issue with anticoagulation control and warrants
-                          urgent follow-up."}
-        ],
-        "has_critical_red_flag": true,
-        "alert_count": 2
-      }
+→ check_red_flags(
+symptoms=[{"symptom":"easy bruising"}, {"symptom":"gum bleeding"}],
+conditions=[Chronic heart failure, Atrial fibrillation, Diabetes, Hypertension, CKD],
+medications=[Warfarin 5mg, Metformin 1000mg, Enalapril 20mg, Furosemide 40mg])
+← check_red_flags · 2 alert(s) ⚠️ CRITICAL (2.9s)
+Result: {
+"alerts": [
+{"red_flag": "Bleeding symptoms with anticoagulant use",
+"symptom": "gum bleeding",
+"related_condition_or_medication": "Warfarin 5mg",
+"risk": "critical",
+"explanation": "The patient is experiencing gum bleeding while on warfarin,
+which poses a significant risk of serious bleeding complications
+requiring immediate attention."},
+{"red_flag": "Bleeding symptoms with anticoagulant use",
+"symptom": "easy bruising",
+"related_condition_or_medication": "Warfarin 5mg",
+"risk": "elevated",
+"explanation": "Easy bruising in a patient taking warfarin indicates a
+potential issue with anticoagulation control and warrants
+urgent follow-up."}
+],
+"has_critical_red_flag": true,
+"alert_count": 2
+}
 ```
 
 **The agent detected a critical red flag:** bleeding symptoms in a patient on warfarin. This is one of the most dangerous drug-symptom combinations in medicine—uncontrolled anticoagulation can lead to intracranial hemorrhage, GI bleeding, or death. The LLM-powered red flag checker caught it because it was given the full medication list from FHIR, not just the patient's stated symptoms.
@@ -172,6 +184,8 @@ Then comes the critical moment. The agent runs `check_red_flags` on the **Clinic
 The agent immediately warns Joao:
 
 > **"It's important I tell you about some serious concerns. You're experiencing gum bleeding and easy bruising while taking Warfarin. This represents a critical risk of serious complications that require immediate attention. Please seek urgent medical assistance to discuss these symptoms."**
+
+![Red flag detected — warfarin + bleeding = CRITICAL, visible in the trace panel](screenshot_joao_red_flags.png)
 
 ### STEP 3 Continued — More Symptoms
 
@@ -182,32 +196,32 @@ Joao continues:
 The same loop runs: `analyze_patient_response` extracts dizziness (neurological) and fatigue (general), then `check_red_flags` cross-references with his atrial fibrillation and heart failure:
 
 ```
-    ← check_red_flags · 2 alert(s) (4.7s)
-      Result: {
-        "alerts": [
-          {"red_flag": "Dizziness with atrial fibrillation and hypertension",
-           "risk": "elevated",
-           "explanation": "Dizziness may indicate inadequate cerebral perfusion
-                          or potential arrhythmia, warranting urgent follow-up."},
-          {"red_flag": "Fatigue with heart failure and diabetes",
-           "risk": "elevated",
-           "explanation": "Fatigue could suggest worsening heart function
-                          or poor glycemic control, necessitating further evaluation."}
-        ],
-        "has_critical_red_flag": false
-      }
+← check_red_flags · 2 alert(s) (4.7s)
+Result: {
+"alerts": [
+{"red_flag": "Dizziness with atrial fibrillation and hypertension",
+"risk": "elevated",
+"explanation": "Dizziness may indicate inadequate cerebral perfusion
+or potential arrhythmia, warranting urgent follow-up."},
+{"red_flag": "Fatigue with heart failure and diabetes",
+"risk": "elevated",
+"explanation": "Fatigue could suggest worsening heart function
+or poor glycemic control, necessitating further evaluation."}
+],
+"has_critical_red_flag": false
+}
 ```
 
 Two elevated-risk alerts. Dizziness + atrial fibrillation = possible cerebral hypoperfusion. Fatigue + heart failure = possible decompensation. The agent warns Joao about these in context.
 
-### STEP 4 — Clinical Assessment
+### STEP 4 — Clinical Reasoning
 
 Once triage questions are exhausted, the agent calls a single LLM-powered tool that produces a comprehensive clinical assessment:
 
 ```
-    → clinical_assessment(
-        patient_context={full FHIR history},
-        triage_data={all extracted symptoms, red flags, Q&A})
+→ clinical_assessment(
+patient_context={full FHIR history},
+triage_data={all extracted symptoms, red flags, Q&A})
 ```
 
 This one call produces: **risk assessment** (score, level, factors with justification), **priority suggestion** (routine/urgent/emergency), **clinical summary** for the physician, and **follow-up tasks**. For Joao, the result is high/critical risk with urgent/emergency priority.
@@ -224,6 +238,8 @@ The agent doesn't just produce a report. It writes back to the same FHIR server 
 
 The physician opening Joao's chart sees: a new `Flag` resource warning about warfarin + bleeding, a `Task` requesting urgent INR review, a `QuestionnaireResponse` with the full triage conversation, and an `Encounter` marked urgent. **FHIR becomes a living clinical memory**, enriched by AI, readable by any FHIR-compliant system.
 
+![Full triage completed — all five steps visible in the trace panel](screenshot_joao_full_triage.png)
+
 ---
 
 ## The Contrast: Ana Costa, 28 Years Old
@@ -233,6 +249,8 @@ The same architecture, the same workflow—but a completely different patient.
 Ana Costa has no active conditions (a resolved tonsillitis from 2024), no medications, no allergies, normal vitals (BMI 22, BP 110/70). She reports a sore throat and mild fever.
 
 The trace panel shows the same STEP 1 FHIR queries—0 medications, 0 allergies, 1 resolved condition. `check_red_flags` returns **0 alerts**. The clinical assessment produces low risk, routine priority. No `Flag` or `Task` resources are created. The system adapts entirely to the patient's clinical context.
+
+![Ana Costa — routine triage, no red flags, low risk](screenshot_ana_costa_full.png)
 
 This is the power of FHIR-First reasoning: the same agent asks different questions, checks different red flags, and produces different outputs—because the FHIR server provides different history for each patient.
 
@@ -248,7 +266,7 @@ This bidirectionality is what transforms FHIR from a **data archive** into a **l
 
 ### MCP — Decoupled Tool Access
 
-The Model Context Protocol (MCP) separates tool *provision* from tool *consumption*. The FHIR server runs on port 8000, the triage server on 8001, the clinical reasoning server on 8002. Each is an independent FastMCP service with streamable-http transport. The LangChain agent discovers all 17 tools at startup via `MultiServerMCPClient` and calls them as needed.
+The Model Context Protocol (MCP) separates tool *provision* from tool *consumption*. The FHIR server runs on port 8000, the triage server on 8001, the clinical reasoning server on 8002. Each is an independent FastMCP service with streamable-http transport. The LangChain agent discovers all 18 tools at startup via `MultiServerMCPClient` and calls them as needed.
 
 This matters because: any future agent—risk stratification, medication reconciliation, care gap detection—can consume the same FHIR MCP server without re-implementing FHIR CRUD. The triage logic is independent of the data layer. The clinical reasoning is independent of both. **MCP makes healthcare AI composable.**
 
@@ -286,6 +304,21 @@ The physician doesn't need to read the AI's reasoning. They need what FHIR alrea
 
 ---
 
+## Contest Technology Bonuses
+
+TriageAide qualifies for the following technology bonuses in the [AI Agents for FHIR contest](https://openexchange.intersystems.com/contest/46):
+
+| Bonus | Points | How TriageAide qualifies |
+|---|---|---|
+| Implement suggested task (#10: Conversational FHIR Triage Assistant) | 5 | Structured triage questions, `QuestionnaireResponse` storage, clinician handoff summary, follow-up tasks |
+| InterSystems FHIR Server usage | 2 | IRIS for Health FHIR R4 server as the data backbone — both reads and writes |
+| LLM AI / LangChain usage | 3 | LangChain agent with OpenAI gpt-4o-mini powering all clinical reasoning tools |
+| Docker container usage | 2 | Docker Compose with IRIS + triage service, single `docker compose up -d` |
+| First Article on DC | 2 | This article |
+| Online Demo | 2 | Gradio UI with trace panel at `http://localhost:7860` |
+
+---
+
 ## Try It
 
 ```bash
@@ -298,3 +331,9 @@ docker compose build --no-cache && docker compose up -d
 ```
 
 The FHIR server (InterSystems IRIS for Health) loads 4 test patients automatically. The Gradio UI shows the chat on the left and the agent trace on the right. Every tool call, every LLM decision, every FHIR resource created—visible in real time.
+
+Check the application on [InterSystems Open Exchange](https://openexchange.intersystems.com/package/TriageAide).
+
+---
+
+**Declaration of AI usage:** OpenAI gpt-4o-mini powers the triage agent's clinical reasoning tools. Claude (Anthropic) was used as a coding assistant during development. The article text was written by the author.
