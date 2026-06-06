@@ -76,8 +76,10 @@ triage_server.py            # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
 agent.py                    # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
-app.py                      # Gradio chat UI with trace panel — Web (:7860)
-start_servers.sh            # Script to start the 3 MCP servers + Gradio (manual)
+app.py # Gradio chat UI with trace panel — Web (:7860)
+voice_bridge.py # Voice Bridge — OpenAI-compatible API for ElevenLabs (port 8003) *(roadmap)*
+voice_session.py # Voice session store (language detection, auto-eviction) *(roadmap)*
+start_servers.sh # Script to start the 3 MCP servers + Gradio (manual)
 PLAN.md                     # This file — architecture plan
 PROGRESS.md                 # Progress history, discoveries and decisions
 README.md                   # Usage instructions
@@ -172,7 +174,8 @@ README.md                   # Usage instructions
 
 ### Future Work
 
-- [ ] Voice interaction
+- [x] Voice interaction — backend implemented, UI tab hidden in MVP (enable via `ENABLE_VOICE_UI=true`)
+- [ ] Voice UI polish — stabilize ElevenLabs widget integration for production use
 - [ ] Automated tests
 - [ ] Contest submission preparation
 - [ ] Structured logging and health checks on MCP servers

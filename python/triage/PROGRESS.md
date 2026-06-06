@@ -275,7 +275,8 @@ From the triage container, use `http://iris:52773/fhir/r4` (Docker DNS resolves 
 
 ### Future Work / Nice-to-have
 
-- [ ] Voice interaction (mentioned in `doc/app-description.md`, not implemented)
+- [x] Voice interaction — backend implemented (`voice_bridge.py` + `voice_session.py`), UI tab hidden in MVP (enable via `ENABLE_VOICE_UI=true`)
+- [ ] Voice UI polish — stabilize ElevenLabs widget integration for production use
 - [ ] Prompt refinement to ensure consistent creation of QuestionnaireResponse and Tasks
 - [ ] Contest submission preparation
 - [ ] Automated tests (currently only manual tests via curl/Gradio)

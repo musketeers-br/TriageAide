@@ -105,4 +105,4 @@ The agent is NOT a generic chatbot that creates FHIR from scratch. It is an **in
 - **Web UI**: Gradio ChatInterface at http://localhost:7860 (with trace panel)
 - **CLI**: Interactive loop via `python cli.py`
 - **Language**: English
-- **Future**: Voice interaction (planned)
+- **Next Step**: Voice interaction (backend implemented, UI behind `ENABLE_VOICE_UI` flag — see `doc/elevenlabs-integration.md`)
