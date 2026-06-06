@@ -37,6 +37,21 @@ else
   echo "Seed data already exists ($PATIENT_COUNT patients). Skipping."
 fi
 
+if [ -d "/app/cache" ]; then
+  for db in /app/cache/langchain_cache_gradio.db /app/cache/tool_cache_gradio.db; do
+    if [ -f "$db" ]; then
+      target="/root/.cache/$(basename "$db")"
+      if [ ! -f "$target" ]; then
+        mkdir -p /root/.cache
+        cp "$db" "$target"
+        echo "Pre-populated cache: $(basename "$db")"
+      else
+        echo "Cache already exists: $(basename "$db") — skipping"
+      fi
+    fi
+  done
+fi
+
 echo "Starting FHIR MCP Server on port 8000..."
 python3 fhir_server.py &
 FHIR_PID=$!

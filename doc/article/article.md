@@ -286,7 +286,7 @@ The entire triage application runs on Python: FastMCP for MCP servers, LangChain
 
 TriageAide runs with `LLM_CACHE=sqlite`, meaning LLM calls and tool invocations are cached in SQLite databases. Once a scenario is executed (like the Joao Santos walkthrough above), subsequent runs with identical inputs produce **identical traces**—served from cache, no API calls, no cost, no variance.
 
-This means the demo is **reproducible**: deploy the cache files alongside the Docker containers, and readers can follow the exact same trace panel flow described in this article. Same FHIR data, same questions, same red flags, same clinical assessment.
+The repository ships pre-populated cache files at `python/triage/cache/` containing exactly the LLM responses and tool calls from the scenarios in this article. On first boot, the container entrypoint copies these into the active cache directory. This means `docker compose up -d` followed by typing the article messages produces the **exact same trace panel flow** described here—same FHIR queries, same triage questions, same red flags, same clinical assessment. Zero API cost, zero variance.
 
 ---
 
