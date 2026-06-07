@@ -2,8 +2,8 @@
 TriageAide Voice Bridge — FastAPI server (port 8003).
 
 Exposes an OpenAI-compatible /v1/chat/completions endpoint that ElevenLabs
-calls as a "Custom LLM". Handles session state, language detection, and
-markdown stripping so TTS output sounds natural.
+calls as a "Custom LLM". Handles session state and markdown stripping
+so TTS output sounds natural.
 """
 import os
 import re
@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 
 from agent import create_triage_agent, extract_ai_response
-from voice_session import VoiceSessionStore, detect_language
+from voice_session import VoiceSessionStore
 from logging_config import setup_logging
 
 logger = setup_logging("voice_bridge", "voice_bridge.log")
@@ -38,11 +38,11 @@ logger.info("VOICE_BRIDGE_SECRET loaded (%s)", "default" if VOICE_BRIDGE_SECRET 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _agent, _mcp_client
-    logger.info("Initializing triage agent (language=auto, voice_mode=True)...")
+    logger.info("Initializing triage agent (voice_mode=True)...")
     max_retries = 6
     for attempt in range(1, max_retries + 1):
         try:
-            _agent, _mcp_client = await create_triage_agent(language="auto", voice_mode=True, cache_namespace="voice")
+            _agent, _mcp_client = await create_triage_agent(voice_mode=True, cache_namespace="voice")
             logger.info("Agent ready — listening on port 8003.")
             break
         except Exception as e:
@@ -245,12 +245,6 @@ async def chat_completions(
 
     last_text = user_msgs[-1].get("content", "").strip()[:2000]
     logger.debug("session=%s | User text: %.80s%s", session_id[:12], last_text, "..." if len(last_text) > 80 else "")
-
-    if not session.language:
-        detected = detect_language(last_text)
-        await _store.update_language(session_id, detected)
-        session.language = detected
-        logger.info("session=%s | Language detected: %s", session_id[:12], detected)
 
     messages = list(session.messages)
     messages.append(HumanMessage(content=last_text))

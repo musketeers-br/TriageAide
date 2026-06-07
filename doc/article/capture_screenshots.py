@@ -79,6 +79,25 @@ def main():
         page.screenshot(path=path, full_page=True)
         print(f"  {path}")
 
+        # 5. Ana Costa — routine triage, no red flags, low risk
+        print("Navigating to fresh page for Ana Costa...")
+        page.goto(GRADIO_URL, wait_until="load")
+        page.wait_for_selector(".gradio-container", timeout=30000)
+        time.sleep(5)
+
+        print("Sending Ana Costa message 1...")
+        _send_message(page, "Hi, I'm Ana Costa, I've been having frequent headaches and feeling tired lately")
+        _wait_for_response(page, timeout=90)
+        time.sleep(2)
+
+        print("Sending Ana Costa message 2 (mild symptoms, no red flags)...")
+        _send_message(page, "The headaches are mostly in the afternoon, and I just feel a bit wiped out by end of day")
+        _wait_for_response(page, timeout=180)
+        time.sleep(2)
+        path = os.path.join(OUT_DIR, "screenshot_ana_costa_full.png")
+        page.screenshot(path=path, full_page=True)
+        print(f"  {path}")
+
         browser.close()
 
     print("\nDone! Screenshots saved to:", OUT_DIR)

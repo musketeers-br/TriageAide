@@ -647,9 +647,9 @@ def main():
                 gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
                 gr.Markdown(
                     "Speak with the triage agent in **English** or **Português (Brasil)**. "
-                    "The agent automatically detects your language and responds in kind.\n\n"
+                    "The agent responds in the language you use.\n\n"
                     "Fale com o agente de triagem em **inglês** ou **Português (Brasil)**. "
-                    "O agente detecta automaticamente o idioma e responde no mesmo idioma."
+                    "O agente responde no idioma que você usar."
                 )
 
                 _el_agent_id = os.getenv("ELEVENLABS_WIDGET_ID", "") or os.getenv("ELEVENLABS_AGENT_ID", "")
@@ -705,14 +705,14 @@ def main():
                     1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
                     2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
                     3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-                    4. Select a Brazilian Portuguese voice and enable **language auto-detection**
+                    4. Select a Brazilian Portuguese voice
                     5. Copy the Agent ID from the URL and paste it in the field above
 
                     **Português — Configuração do Custom LLM:**
                     1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
                     2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
                     3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-                    4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
+                    4. Selecione uma voz em Português do Brasil
                     5. Copie o Agent ID da URL e cole no campo acima
                     """)
 

@@ -117,15 +117,15 @@ covered_topics=[],
 patient_initial_message="Hi, I'm Joao Santos, I've been having trouble
 breathing at night and my legs are swollen")
 ← get_next_triage_question · 1 question (3 remaining) (1.3s)
-Result: "Have you noticed any chest pain or discomfort along
-with your breathing issues?"
+Result: "I'm sorry to hear that you're having trouble breathing at night.
+Have you noticed any chest pain or tightness along with that?"
 ```
 
 Notice what happened: the `patient_initial_message` parameter passes Joao's own words. The LLM-powered triage tool sees "trouble breathing at night and swollen legs" and **skips the generic opener**. It doesn't ask "How are you feeling today?" It goes straight to red-flag screening for a heart failure patient: chest pain.
 
 The agent asks Joao:
 
-> **"I'm sorry to hear you're having trouble breathing at night. Have you noticed any chest pain or discomfort along with your breathing issues?"**
+> **"I'm sorry to hear that you're having trouble breathing at night. Have you noticed any chest pain or tightness along with that?"**
 
 Joao responds:
 
@@ -159,20 +159,20 @@ medications=[Warfarin 5mg, Metformin 1000mg, Enalapril 20mg, Furosemide 40mg])
 ← check_red_flags · 2 alert(s) ⚠️ CRITICAL (2.9s)
 Result: {
 "alerts": [
-{"red_flag": "Bleeding symptoms with anticoagulant use",
-"symptom": "gum bleeding",
-"related_condition_or_medication": "Warfarin 5mg",
-"risk": "critical",
-"explanation": "The patient is experiencing gum bleeding while on warfarin,
-which poses a significant risk of serious bleeding complications
-requiring immediate attention."},
-{"red_flag": "Bleeding symptoms with anticoagulant use",
-"symptom": "easy bruising",
-"related_condition_or_medication": "Warfarin 5mg",
-"risk": "elevated",
-"explanation": "Easy bruising in a patient taking warfarin indicates a
-potential issue with anticoagulation control and warrants
-urgent follow-up."}
+{"red_flag": "Bleeding symptoms with warfarin use",
+  "symptom": "gum bleeding",
+  "related_condition_or_medication": "Warfarin 5mg",
+  "risk": "critical",
+  "explanation": "The patient is experiencing gum bleeding while on warfarin,
+  which significantly increases the risk of serious bleeding complications
+  and requires immediate attention."},
+  {"red_flag": "Bleeding symptoms with warfarin use",
+  "symptom": "easy bruising",
+  "related_condition_or_medication": "Warfarin 5mg",
+  "risk": "elevated",
+  "explanation": "Easy bruising in a patient taking warfarin indicates a
+  potential issue with anticoagulation control and warrants
+  urgent follow-up."}
 ],
 "has_critical_red_flag": true,
 "alert_count": 2
@@ -183,7 +183,7 @@ urgent follow-up."}
 
 The agent immediately warns Joao:
 
-> **"It's important I tell you about some serious concerns. You're experiencing gum bleeding and easy bruising while taking Warfarin. This represents a critical risk of serious complications that require immediate attention. Please seek urgent medical assistance to discuss these symptoms."**
+> **"I need to inform you that the symptoms you mentioned, like gum bleeding and easy bruising, are critical. You're currently taking warfarin, which can cause serious bleeding complications. It's very important that you seek immediate medical attention for this."**
 
 ![Red flag detected — warfarin + bleeding = CRITICAL, visible in the trace panel](screenshot_joao_red_flags.png)
 
@@ -196,23 +196,29 @@ Joao continues:
 The same loop runs: `analyze_patient_response` extracts dizziness (neurological) and fatigue (general), then `check_red_flags` cross-references with his atrial fibrillation and heart failure:
 
 ```
-← check_red_flags · 2 alert(s) (4.7s)
+← check_red_flags · 3 alert(s) (5.1s)
 Result: {
 "alerts": [
 {"red_flag": "Dizziness with atrial fibrillation and hypertension",
 "risk": "elevated",
-"explanation": "Dizziness may indicate inadequate cerebral perfusion
-or potential arrhythmia, warranting urgent follow-up."},
+"explanation": "Dizziness in the context of atrial fibrillation and
+hypertension may indicate inadequate blood flow or potential
+arrhythmia, necessitating urgent evaluation."},
 {"red_flag": "Fatigue with heart failure and diabetes",
 "risk": "elevated",
-"explanation": "Fatigue could suggest worsening heart function
-or poor glycemic control, necessitating further evaluation."}
+"explanation": "Fatigue in a patient with heart failure and diabetes
+may suggest worsening heart function or poor glycemic control,
+requiring prompt assessment."},
+{"red_flag": "Dizziness with warfarin use",
+"risk": "elevated",
+"explanation": "Dizziness in a patient on warfarin may indicate
+bleeding or anemia, warranting further investigation."}
 ],
 "has_critical_red_flag": false
 }
 ```
 
-Two elevated-risk alerts. Dizziness + atrial fibrillation = possible cerebral hypoperfusion. Fatigue + heart failure = possible decompensation. The agent warns Joao about these in context.
+Three elevated-risk alerts. Dizziness + atrial fibrillation = possible cerebral hypoperfusion. Fatigue + heart failure = possible decompensation. Dizziness + warfarin = possible bleeding/anemia. The agent warns Joao about these in context.
 
 ### STEP 4 — Clinical Reasoning
 

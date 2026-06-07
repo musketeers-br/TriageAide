@@ -14,32 +14,6 @@ load_dotenv(override=True)
 
 logger = setup_logging("agent")
 
-_ENGLISH_ONLY_RULE = (
-    "# LANGUAGE RULE — MANDATORY\n\n"
-    "You MUST communicate exclusively in English. All responses, questions, summaries, "
-    "and clinical outputs must be in English. Do not use Portuguese or any other language."
-)
-
-LANGUAGE_RULES = {
-    "en": _ENGLISH_ONLY_RULE,
-    "pt-BR": (
-        "# REGRA DE IDIOMA — OBRIGATÓRIO\n\n"
-        "Você DEVE se comunicar EXCLUSIVAMENTE em Português do Brasil. Todas as respostas, "
-        "perguntas, resumos e saídas clínicas devem estar em Português do Brasil. Não use "
-        "inglês ou qualquer outro idioma. Cumprimente o paciente pelo nome e conduza toda "
-        "a triagem em português de forma natural e acolhedora."
-    ),
-    "auto": (
-        "# LANGUAGE RULE — MANDATORY\n\n"
-        "Detect the language used by the patient in their messages. Respond in the SAME language "
-        "the patient uses. For example: if they write in Portuguese, respond in Portuguese; if they "
-        "write in English, respond in English; if they write in Spanish, respond in Spanish — and so "
-        "on for any language. Mirror the patient's language consistently throughout the entire "
-        "conversation. Never mix languages in the same response. If the patient switches language "
-        "mid-conversation, switch accordingly."
-    ),
-}
-
 _VOICE_MODE_ADDENDUM = (
     "\n\n---\n\n"
     "# VOICE MODE — ACTIVE\n\n"
@@ -61,12 +35,6 @@ You have access to three tool ecosystems (MCPs):
 
 ---
 
-# LANGUAGE RULE — MANDATORY
-
-You MUST communicate exclusively in English. All responses, questions, summaries, and clinical outputs must be in English. Do not use Portuguese or any other language.
-
----
-
 # CONVERSATION RULES — EMPATHY FIRST
 
 1. Above all, be empathetic. The patient may not be feeling well. Keep the conversation short, warm, and natural. Avoid repetitive phrasing that makes the interaction feel robotic.
@@ -78,8 +46,7 @@ You MUST communicate exclusively in English. All responses, questions, summaries
 7. If `get_next_triage_question` returns question=null, do not ask more questions — proceed to STEP 3.
 8. You already know the patient's conditions from FHIR. Mention a condition by name at most ONCE — the first time it becomes relevant. After that, the patient already knows — just ask follow-up questions directly. Avoid repeating "I see you have [condition]..." on every question, it feels robotic and tiresome.
 9. Formulate each question in a natural, welcoming, and conversational manner, as a healthcare professional would speak.
-10. Follow the LANGUAGE RULE above — communicate in the patient's language.
-11. Use accessible language for the patient, avoiding technical jargon.
+10. Use accessible language for the patient, avoiding technical jargon.
 
 ---
 
@@ -167,10 +134,9 @@ When concluding the triage, present the summary in the following format:
 """
 
 
-def get_system_prompt(language: str = "auto", voice_mode: bool = False) -> str:
-    """Build the system prompt with the given language and voice mode settings."""
-    lang_rule = LANGUAGE_RULES.get(language, LANGUAGE_RULES["en"])
-    prompt = SYSTEM_PROMPT.replace(_ENGLISH_ONLY_RULE, lang_rule)
+def get_system_prompt(voice_mode: bool = False) -> str:
+    """Build the system prompt with the given voice mode setting."""
+    prompt = SYSTEM_PROMPT
     if voice_mode:
         prompt += _VOICE_MODE_ADDENDUM
     return prompt
@@ -242,8 +208,8 @@ def _fix_tool_args_schema(tools):
     return fixed
 
 
-async def create_triage_agent(language: str = "auto", voice_mode: bool = False, cache_namespace: str = ""):
-    logger.info("Creating triage agent | language=%s | voice_mode=%s | cache_ns=%s", language, voice_mode, cache_namespace or "(none)")
+async def create_triage_agent(voice_mode: bool = False, cache_namespace: str = ""):
+    logger.info("Creating triage agent | voice_mode=%s | cache_ns=%s", voice_mode, cache_namespace or "(none)")
     client = MultiServerMCPClient(get_mcp_config())
 
     all_tools = await client.get_tools()
@@ -270,7 +236,7 @@ async def create_triage_agent(language: str = "auto", voice_mode: bool = False, 
     agent = create_agent(
         model,
         all_tools,
-        system_prompt=get_system_prompt(language, voice_mode),
+        system_prompt=get_system_prompt(voice_mode),
     )
 
     logger.info("Triage agent created successfully")
