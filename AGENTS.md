@@ -100,6 +100,7 @@ do ##class(FHIR.utils).uninstall("PID")
 ### Testing
 - No automated unit test framework is configured in this repository
 - Manual testing via FHIR API calls (curl/Postman) and the demo UI
+- **Clean-slate build verification**: See [`doc/build-test-plan.md`](doc/build-test-plan.md) for a full Phase 0–6 plan to wipe all Docker artifacts and rebuild from scratch following the README
 - FHIR API endpoint: `http://localhost:32783/fhir/r4`
 - Swagger UI: `http://localhost:32783/swagger-ui/index.html`
 - Demo UI: `http://localhost:32783/fhirUI/FHIRAppDemo.html`
@@ -266,9 +267,10 @@ agent.py # Core agent factory (SYSTEM_PROMPT, create_triage_agent, extract_ai_re
   PROGRESS.md                           # Progress history & technical discoveries
   README.md                             # Usage instructions & troubleshooting
 python/example/                         # Earlier MCP example (reference, not the triage app)
-doc/                                    # Documentation
-  app-description.md                    # App concept & architecture description
-  scenario1.md                          # Detailed triage scenario (5-step workflow)
+doc/ # Documentation
+app-description.md # App concept & architecture description
+scenario1.md # Detailed triage scenario (5-step workflow)
+build-test-plan.md # Clean-slate build verification plan (Phase 0–6)
 iris.script                             # IRIS initialization script (runs on docker build)
 merge.cpf                               # CPF merge actions (namespaces, databases)
 module.xml                              # IPM package definition
