@@ -36,13 +36,13 @@ TriageAide separates concerns into three MCP (Model Context Protocol) servers, e
 
 A **LangChain agent** orchestrates these servers through 18 tools, following a five-step mandatory workflow: **FHIR Query → Contextual Triage → Red Flags Check → Clinical Reasoning → FHIR Update.** Under the hood, `langchain.agents.create_agent` builds a compiled LangGraph state graph with two nodes — `model` (LLM reasoning) and `tools` (all 18 MCP tools in a single ToolNode) — connected in a ReAct loop:
 
-![LangGraph agent](https://raw.githubusercontent.com/musketeers-br/TriageAide/271a5edd32f2c7f5cc5ff0d761a610c99482273f/doc/article/mermaid_diagram_langgraph1.png)
+![LangGraph agent](https://raw.githubusercontent.com/musketeers-br/TriageAide/refs/heads/master/doc/article/mermaid_diagram_langgraph1.png)
 
 The `model` node decides at each step: respond to the patient, or invoke a tool. When it chooses a tool, the `tools` node executes it and feeds the result back to `model`, which reasons again. This loop continues until the model produces a final response — the ReAct (Reason + Act) pattern that powers every step of the triage workflow.
 
 The clinical workflow maps five domain steps onto this ReAct loop:
 
-![Agent - full workflow](https://raw.githubusercontent.com/musketeers-br/TriageAide/271a5edd32f2c7f5cc5ff0d761a610c99482273f/doc/article/mermaid_diagram_langgraph2.png)
+![Agent - full workflow](https://raw.githubusercontent.com/musketeers-br/TriageAide/refs/heads/master/doc/article/mermaid_diagram_langgraph2.png)
 
 **InterSystems IRIS for Health** is the foundation — a transactional, SQL-accessible FHIR R4 repository using the `JsonAdvSql` interactions strategy. The agent queries via standard FHIR REST API (`GET /Condition?patient=2196`) and writes back clinical alerts (`POST /Flag`, `POST /Task`) to the same canonical record. No ETL, no sync — the AI reads from and writes to the same server, transforming FHIR from a data archive into a living clinical memory.
 

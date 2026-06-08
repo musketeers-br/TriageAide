@@ -1,0 +1,11 @@
+graph TD
+    __start__[__start__] --> model[model<br>LLM reasoning]
+    model -.->|invoke tool| tools[tools<br>18 MCP tools]
+    tools --> model
+    model -.->|respond to patient| __end__[__end__]
+
+    %% Estilização para bater com as cores da imagem
+    style __start__ fill:#4CAF50,stroke:#388E3C,color:#fff
+    style __end__ fill:#F44336,stroke:#D32F2F,color:#fff
+    style model fill:#ECEFF1,stroke:#B0BEC5,color:#000
+    style tools fill:#ECEFF1,stroke:#B0BEC5,color:#000

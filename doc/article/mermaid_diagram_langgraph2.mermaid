@@ -1,0 +1,29 @@
+graph LR
+    S1["① FHIR Query"] -->|patient_context| S2
+    S2["② Contextual Triage"] -->|symptoms| S3
+    S3["③ Red Flags Check"] -->|alerts| S4
+    S4["④ Clinical Reasoning"] -->|assessment| S5
+    S5["⑤ FHIR Update"]
+
+    S1 -.- FHIR_R["FHIRServer<br/>7 query tools"]
+    S2 -.- TRIAGE_Q["TriageServer<br/>get_next_triage_question<br/>analyze_patient_response"]
+    S3 -.- TRIAGE_RF["TriageServer<br/>check_red_flags"]
+    S4 -.- CR["ClinicalReasoningServer<br/>clinical_assessment"]
+    S5 -.- FHIR_W["FHIRServer<br/>5 create tools"]
+
+    PATIENT(("👤 Patient")) <-->|questions & answers| S2
+    PATIENT <-->|red flag warnings| S3
+
+    classDef fhir fill:#1565C0,stroke:#0D47A1,color:white
+    classDef triage fill:#2E7D32,stroke:#1B5E20,color:white
+    classDef cr fill:#E65100,stroke:#BF360C,color:white
+    classDef step fill:#858585,stroke:#616161
+    classDef patient fill:#EC407A,stroke:#AD1457,color:white
+
+    class S1,S5 step
+    class S2,S3 step
+    class S4 step
+    class FHIR_R,FHIR_W fhir
+    class TRIAGE_Q,TRIAGE_RF triage
+    class CR cr
+    class PATIENT patient
