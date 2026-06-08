@@ -4,34 +4,47 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+from logging_config import setup_logging
 
 load_dotenv(override=True)
+
+logger = setup_logging("clinical_reasoning_server", "cr_server.log")
 
 mcp = FastMCP("ClinicalReasoningServer")
 
 _llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3, max_tokens=1200)
 
+logger.info("Clinical Reasoning MCP Server initializing | model=gpt-4o-mini")
+
 
 async def _llm_json(system_prompt: str, user_prompt: str, fallback: dict = None) -> str:
+    logger.debug("LLM call | system_prompt_len=%d | user_prompt_len=%d", len(system_prompt), len(user_prompt))
+    logger.debug("LLM call | user_prompt: %.500s", user_prompt)
     try:
         response = await _llm.ainvoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ])
         content = response.content
+        logger.debug("LLM response | raw_len=%d | first 500 chars: %.500s", len(content), content)
         if content.strip().startswith("```"):
             lines = content.strip().split("\n")
             lines = [l for l in lines if not l.strip().startswith("```")]
             content = "\n".join(lines)
         parsed = json.loads(content)
+        logger.debug("LLM response | parsed JSON keys=%s", list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__)
         return json.dumps(parsed, ensure_ascii=False)
     except json.JSONDecodeError:
         raw = response.content if 'response' in dir() else ""
+        logger.warning("LLM returned invalid JSON | raw: %.300s", raw[:300])
         if fallback is not None:
+            logger.info("Using fallback response")
             return json.dumps(fallback, ensure_ascii=False)
         return json.dumps({"error": "LLM returned invalid JSON", "raw": raw[:500]}, ensure_ascii=False)
     except Exception as e:
+        logger.error("LLM call failed: %s: %s", type(e).__name__, str(e)[:300])
         if fallback is not None:
+            logger.info("Using fallback response after error")
             return json.dumps(fallback, ensure_ascii=False)
         return json.dumps({"error": f"LLM call failed: {type(e).__name__}: {str(e)[:300]}"}, ensure_ascii=False)
 
@@ -102,6 +115,7 @@ async def clinical_assessment(
     triage_data: str,
 ) -> str:
     """Performs a comprehensive pre-consultation clinical assessment including risk scoring, priority suggestion, clinical summary, and follow-up tasks. patient_context = JSON with full patient FHIR data (conditions, medications, observations, allergies, demographics). triage_data = JSON with triage results (identified_symptoms, red_flags, covered_topics)."""
+    logger.info("clinical_assessment | context_len=%d | triage_data_len=%d", len(patient_context), len(triage_data))
     try:
         ctx = json.loads(patient_context)
     except (json.JSONDecodeError, TypeError):
@@ -130,8 +144,13 @@ Perform a comprehensive clinical assessment. Return JSON with risk, priority, su
         "follow_up_tasks": [],
     }
 
-    return await _llm_json(_CA_SYSTEM, user_prompt, fallback=fallback)
+    result = await _llm_json(_CA_SYSTEM, user_prompt, fallback=fallback)
+    logger.info("clinical_assessment | result risk=%s priority=%s",
+                json.loads(result).get("risk", {}).get("level", "?") if result else "?",
+                json.loads(result).get("priority", {}).get("level", "?") if result else "?")
+    return result
 
 
 if __name__ == "__main__":
+    logger.info("Starting Clinical Reasoning MCP Server on port 8002...")
     mcp.run(transport="streamable-http", host="0.0.0.0", port=8002)

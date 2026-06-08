@@ -66,6 +66,19 @@ docker compose exec triage bash -c 'tail -5 /tmp/triage_server.log'
 docker compose exec triage bash -c 'tail -5 /tmp/cr_server.log'
 ```
 
+### Live logs
+
+```bash
+# All modules (respects LOG_LEVEL in .env, default DEBUG)
+docker compose logs triage -f
+
+# DEBUG lines only
+docker compose logs triage -f | grep DEBUG
+
+# Per-module follow
+docker compose exec triage tail -f /tmp/fhir_server.log
+```
+
 ### Restart MCP servers manually
 
 ```bash

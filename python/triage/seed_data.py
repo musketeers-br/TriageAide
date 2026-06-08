@@ -4,8 +4,11 @@ import re
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
+from logging_config import setup_logging
 
 load_dotenv()
+
+logger = setup_logging("seed_data")
 
 FHIR_BASE = os.getenv("FHIR_BASE_URL", "http://localhost:32783/fhir/r4")
 FHIR_USER = os.getenv("FHIR_USER", "_SYSTEM")
@@ -58,6 +61,7 @@ def _extract_id_from_location(location):
 
 def _create_resource(resource_type, resource):
     url = f"{FHIR_BASE}/{resource_type}"
+    logger.debug("POST %s | resource id=%s", url, resource.get("id", "(new)"))
     resp = requests.post(
         url,
         json=resource,
@@ -69,23 +73,26 @@ def _create_resource(resource_type, resource):
         location = resp.headers.get("Location", "")
         rid = _extract_id_from_location(location)
         if rid and rid != "?":
+            logger.debug("Created %s/%s", resource_type, rid)
             return rid, None
+        logger.warning("Created %s but could not extract ID from Location: %s", resource_type, location)
         return None, f"Created but could not extract ID from Location header: {location}"
     else:
+        logger.error("Failed to create %s | HTTP %d: %s", resource_type, resp.status_code, resp.text[:200])
         return None, f"{resp.status_code}: {resp.text[:200]}"
 
 
 def load_all():
     bundles = sorted(SEED_DIR.glob("patient_*.json"))
     if not bundles:
-        print(f"No bundles found in {SEED_DIR}")
+        logger.warning("No bundles found in %s", SEED_DIR)
         return
 
-    print(f"Loading {len(bundles)} bundle(s) into {FHIR_BASE} ...")
+    logger.info("Loading %d bundle(s) into %s ...", len(bundles), FHIR_BASE)
     total_created = 0
 
     for bundle_path in bundles:
-        print(f"\n--- {bundle_path.name} ---")
+        logger.info("--- %s ---", bundle_path.name)
         with open(bundle_path, "r", encoding="utf-8") as f:
             bundle = json.load(f)
 
@@ -115,27 +122,27 @@ def load_all():
             rid, err = _create_resource("Patient", resource)
             if rid:
                 name = _extract_name(resource)
-                print(f" Patient/{rid} {name} OK")
+                logger.info(" Patient/%s %s OK", rid, name)
                 uuid_map[full_url] = rid
                 total_created += 1
             else:
-                print(f" Patient ERROR {err}")
+                logger.error(" Patient ERROR %s", err)
 
         for full_url, resource in other_entries:
             resolved = _resolve_references(resource, uuid_map)
             resource_type = resolved.get("resourceType", "?")
             rid, err = _create_resource(resource_type, resolved)
             if rid:
-                print(f" {resource_type}/{rid} OK")
+                logger.info(" %s/%s OK", resource_type, rid)
                 total_created += 1
             else:
-                print(f" {resource_type} ERROR {err}")
+                logger.error(" %s ERROR %s", resource_type, err)
 
-    print(f"\nTotal resources created: {total_created}")
+    logger.info("Total resources created: %d", total_created)
 
 
 def clean():
-    print(f"Removing test resources tagged with '{PATIENT_TAG}' ...")
+    logger.info("Removing test resources tagged with '%s' ...", PATIENT_TAG)
     removed = 0
 
     for resource_type in ["Patient", "Condition", "Observation",
@@ -190,7 +197,7 @@ def clean():
         except Exception:
             pass
 
-    print(f"Resources removed: {removed}")
+    logger.info("Resources removed: %d", removed)
 
 
 def _extract_name(resource):
@@ -206,20 +213,20 @@ def list_seed_patients():
     params = {"_tag": PATIENT_TAG, "_count": 50}
     resp = requests.get(url, params=params, headers=_headers(), auth=_auth(), timeout=30)
     if resp.status_code != 200:
-        print(f"Error {resp.status_code}: {resp.text[:200]}")
+        logger.error("Error %d: %s", resp.status_code, resp.text[:200])
         return
 
     bundle = resp.json()
     entries = bundle.get("entry", [])
     if not entries:
-        print("No test patients found.")
+        logger.info("No test patients found.")
         return
 
-    print(f"Test patients ({len(entries)}):")
+    logger.info("Test patients (%d):", len(entries))
     for entry in entries:
         p = entry["resource"]
         name = _extract_name(p)
-        print(f" id={p['id']} {name} gender={p.get('gender')} birthDate={p.get('birthDate')}")
+        logger.info(" id=%s %s gender=%s birthDate=%s", p['id'], name, p.get('gender'), p.get('birthDate'))
 
 
 if __name__ == "__main__":
@@ -237,4 +244,4 @@ if __name__ == "__main__":
     elif cmd == "list":
         list_seed_patients()
     else:
-        print(f"Usage: python seed_data.py [load|clean|reload|list]")
+        logger.error("Usage: python seed_data.py [load|clean|reload|list]")

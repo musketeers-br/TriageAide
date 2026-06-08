@@ -51,6 +51,15 @@ docker compose exec triage bash -c 'cat /tmp/triage_server.log'
 docker compose exec triage bash -c 'cat /tmp/cr_server.log'
 docker compose exec triage bash -c 'cat /tmp/voice_bridge.log'
 
+# Live logs (all modules, respects LOG_LEVEL)
+docker compose logs triage -f
+
+# Live logs — DEBUG lines only
+docker compose logs triage -f | grep DEBUG
+
+# Live per-module log files
+docker compose exec triage tail -f /tmp/fhir_server.log
+
 # Check triage container logs
 docker compose logs triage
 ```
@@ -195,8 +204,8 @@ Two separate Docker services on a shared `fhir-net` bridge network:
 
 ### Key Files
 
-- `python/triage/.env` — Config (OPENAI_API_KEY, LANGSMITH_*) — NOT tracked in git
-- `python/triage/.env.example` — Template without credentials
+- `python/triage/.env` — Config (OPENAI_API_KEY, LANGSMITH_*, LOG_LEVEL) — NOT tracked in git
+- `python/triage/.env.example` — Template without credentials (LOG_LEVEL defaults to DEBUG)
 - `python/triage/seed_data.py` — Load/clean/list test patients
 - `python/triage/seed_data/` — FHIR Bundle JSON files for 4 test patients
 - `python/triage/Dockerfile` — Python 3.12-slim image for the triage service
@@ -238,11 +247,12 @@ data/fhir/                              # Pre-loaded Synthea patient JSON bundle
 fhirUI/                                 # Demo frontend (HTML + JS)
 misc/sql/                               # Example SQL queries
 misc/postman/                           # Postman collection for FHIR API
-python/triage/                          # Triage App (main application)
-  fhir_server.py                        # MCP Server 1 — FHIR CRUD (port 8000)
-  triage_server.py                      # MCP Server 2 — Triage contextual (port 8001)
-  clinical_reasoning_server.py          # MCP Server 3 — Clinical reasoning (port 8002)
-  agent.py                              # Core agent factory (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+python/triage/ # Triage App (main application)
+fhir_server.py # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py # MCP Server 2 — Triage contextual (port 8001)
+clinical_reasoning_server.py # MCP Server 3 — Clinical reasoning (port 8002)
+logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file handlers)
+agent.py # Core agent factory (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
   cli.py                                # CLI interactive interface
   app.py                                # Gradio web UI chat with trace panel
   seed_data.py                          # Test patient load/clean/list script
@@ -276,3 +286,4 @@ docker-compose.yml                      # Docker Compose configuration (iris + t
 - The `python/triage/.env` file contains real credentials (OPENAI_API_KEY) — it is NOT tracked in git
 - Pip installs done manually inside a running container are lost on restart — add new dependencies to `python/triage/Dockerfile` and `requirements.txt`
 - MCP servers auto-start on container boot via `python/triage/entrypoint.sh` — check container logs with `docker compose logs triage`
+- `LOG_LEVEL` env var controls log verbosity (default: `DEBUG`). Set to `INFO` in `.env` for quieter output. DEBUG shows full FHIR request/response payloads, LLM prompts, tool details, cache HIT/MISS.

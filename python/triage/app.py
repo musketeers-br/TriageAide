@@ -10,10 +10,13 @@ import gradio as gr
 from gradio import ChatMessage
 
 from agent import create_triage_agent, extract_ai_response
+from logging_config import setup_logging
 
 load_dotenv(override=True)
 
 _show_voice_ui = os.getenv("ENABLE_VOICE_UI", "false").lower() in ("1", "true", "yes")
+
+logger = setup_logging("app", "app.log")
 
 _agent_instance = None
 _client = None
@@ -179,6 +182,7 @@ class TriageTraceHandler(AsyncCallbackHandler):
         tool_input = inputs if isinstance(inputs, dict) else {}
         tool_name = name or (serialized.get("name") if isinstance(serialized, dict) else None) or "unknown"
         self._tool_times[str(run_id)] = time.time()
+        logger.info("Tool start: %s | args=%s", tool_name, _summarize_tool_input(tool_name, tool_input))
         await self.queue.put({
             "type": "tool_start",
             "tool_name": tool_name,
@@ -202,6 +206,8 @@ class TriageTraceHandler(AsyncCallbackHandler):
                 output_str = str(content)
         else:
             output_str = str(output)
+        logger.info("Tool end: %s | elapsed=%ss | result_summary=%s", name, elapsed, _summarize_tool_result(name, output_str))
+        logger.debug("Tool end: %s | full_result: %.500s", name, output_str[:500])
         await self.queue.put({
             "type": "tool_end",
             "tool_name": name,
@@ -210,10 +216,12 @@ class TriageTraceHandler(AsyncCallbackHandler):
             "elapsed": elapsed,
         })
 
-    async def on_tool_error(self, error, *, run_id, name, **kwargs):
+    async def on_tool_error(self, error, *, run_id, **kwargs):
+        tool_name = kwargs.get("name", "unknown")
+        logger.error("Tool error: %s | %s: %s", tool_name, type(error).__name__, str(error)[:500])
         await self.queue.put({
             "type": "tool_error",
-            "tool_name": name,
+            "tool_name": tool_name,
             "run_id": str(run_id),
             "error": f"{type(error).__name__}: {str(error)[:500]}",
         })
@@ -223,9 +231,20 @@ async def _get_agent():
     global _agent_instance, _client
     if _agent_instance is not None:
         return _agent_instance
-    agent, _client = await create_triage_agent(cache_namespace="gradio")
-    _agent_instance = agent
-    return agent
+    logger.info("Initializing triage agent for Gradio UI...")
+    max_retries = 6
+    for attempt in range(1, max_retries + 1):
+        try:
+            agent, _client = await create_triage_agent(cache_namespace="gradio")
+            _agent_instance = agent
+            logger.info("Agent ready for Gradio UI")
+            return agent
+        except Exception as e:
+            logger.warning("Agent init attempt %d/%d failed: %s", attempt, max_retries, str(e)[:300])
+            if attempt == max_retries:
+                logger.error("Agent init failed after %d attempts", max_retries)
+                raise
+            await asyncio.sleep(5)
 
 
 class _TraceState:
@@ -354,8 +373,8 @@ def _apply_trace_event(event, chat_history, trace_history, compact, st):
                 "title": f"{icon} → {tool_name}",
                 "status": "pending",
                 "id": f"tool-{run_id}",
-            "parent_id": f"step-{step_num}" if step_num else "",
-            "log": input_summary,
+                "parent_id": f"step-{step_num}" if step_num else "",
+                "log": input_summary,
             },
         )
         target.append(entry)
@@ -425,6 +444,7 @@ def _apply_trace_event(event, chat_history, trace_history, compact, st):
 async def _run_with_trace(message, chat_history, trace_history, view_mode):
     global _session_messages
     agent = await _get_agent()
+    logger.info("Chat submission | message=%.100s | mode=%s", message[:100], view_mode)
 
     if not chat_history:
         _session_messages = []
@@ -492,6 +512,7 @@ async def _run_with_trace(message, chat_history, trace_history, view_mode):
         elapsed = time.time() - t0_total
         err = e.exceptions[0] if isinstance(e, BaseExceptionGroup) else e
         err_msg = f"Error ({elapsed:.1f}s): {type(err).__name__}: {str(err)}"
+        logger.error("Agent invocation failed: %s", err_msg)
         chat_history.append(ChatMessage(role="assistant", content=err_msg))
         if not compact:
             trace_history.append(ChatMessage(
@@ -506,6 +527,7 @@ async def _run_with_trace(message, chat_history, trace_history, view_mode):
 
     ai_response = extract_ai_response(_session_messages)
     elapsed = time.time() - t0_total
+    logger.info("Agent response ready | elapsed=%.1fs | response_len=%d", elapsed, len(ai_response) if ai_response else 0)
 
     chat_history.append(ChatMessage(
         role="assistant",
@@ -625,9 +647,9 @@ def main():
                 gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
                 gr.Markdown(
                     "Speak with the triage agent in **English** or **Português (Brasil)**. "
-                    "The agent automatically detects your language and responds in kind.\n\n"
+                    "The agent responds in the language you use.\n\n"
                     "Fale com o agente de triagem em **inglês** ou **Português (Brasil)**. "
-                    "O agente detecta automaticamente o idioma e responde no mesmo idioma."
+                    "O agente responde no idioma que você usar."
                 )
 
                 _el_agent_id = os.getenv("ELEVENLABS_WIDGET_ID", "") or os.getenv("ELEVENLABS_AGENT_ID", "")
@@ -683,14 +705,14 @@ def main():
                     1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
                     2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
                     3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-                    4. Select a Brazilian Portuguese voice and enable **language auto-detection**
+                    4. Select a Brazilian Portuguese voice
                     5. Copy the Agent ID from the URL and paste it in the field above
 
                     **Português — Configuração do Custom LLM:**
                     1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
                     2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
                     3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-                    4. Selecione uma voz em Português do Brasil e habilite **detecção automática de idioma**
+                    4. Selecione uma voz em Português do Brasil
                     5. Copie o Agent ID da URL e cole no campo acima
                     """)
 
@@ -750,6 +772,7 @@ def main():
         theme=gr.themes.Soft(),
         head=_el_head,
     )
+    logger.info("Gradio UI launched on port 7860")
 
 
 if __name__ == "__main__":

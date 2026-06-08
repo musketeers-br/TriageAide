@@ -1,228 +1,18 @@
 import os
-import warnings
-import hashlib
-import json
-import re
-import sqlite3
-from functools import wraps
 from dotenv import load_dotenv
+from cache import get_llm_cache, get_tool_cache, wrap_tools_with_cache
+from logging_config import setup_logging
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
+from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, create_model
 
 load_dotenv(override=True)
 
-
-def _normalize_cache_prompt(prompt_str):
-    """Strip volatile fields from serialized messages so cache keys match across runs.
-
-    Removes: response_metadata, usage_metadata, token_usage, OpenAI chatcmpl-* IDs,
-    tool_call IDs, and lc message IDs — all of which change between identical invocations.
-    """
-    try:
-        msgs = json.loads(prompt_str)
-    except (json.JSONDecodeError, TypeError):
-        return prompt_str
-    normalized = []
-    for msg in msgs:
-        kwargs = msg.get("kwargs", {})
-        kwargs.pop("response_metadata", None)
-        kwargs.pop("usage_metadata", None)
-        kwargs.pop("id", None)
-        add_kwargs = kwargs.get("additional_kwargs", {})
-        add_kwargs.pop("refusal", None)
-        tool_calls = add_kwargs.get("tool_calls", [])
-        for tc in tool_calls:
-            tc.pop("id", None)
-        if "tool_call_id" in add_kwargs:
-            add_kwargs["tool_call_id"] = "__normalized__"
-        msg["kwargs"] = kwargs
-        normalized.append(msg)
-    return json.dumps(normalized, sort_keys=True, ensure_ascii=False)
-
-
-def _get_llm_cache(cache_namespace: str = ""):
-    cache_type = os.getenv("LLM_CACHE", "").lower()
-    if cache_type == "sqlite":
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                from langchain_community.cache import SQLiteCache
-            default_db_path = os.path.join(os.path.expanduser("~"), ".cache", "langchain_cache.db")
-            if cache_namespace:
-                base, ext = os.path.splitext(default_db_path)
-                default_db_path = f"{base}_{cache_namespace}{ext}"
-            db_path = os.getenv("LLM_CACHE_DB_PATH", default_db_path)
-            if cache_namespace and os.getenv("LLM_CACHE_DB_PATH"):
-                base, ext = os.path.splitext(db_path)
-                db_path = f"{base}_{cache_namespace}{ext}"
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            return _NormalizedSQLiteCache(database_path=db_path)
-        except ImportError:
-            print("WARNING: langchain-community not installed, LLM cache disabled")
-            return None
-    elif cache_type == "memory":
-        from langchain_core.caches import InMemoryCache
-        return InMemoryCache()
-    return None
-
-
-class _NormalizedSQLiteCache:
-    """SQLiteCache wrapper that normalizes prompt keys to improve cache hit rates in agent flows."""
-
-    def __init__(self, database_path):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            from langchain_core.caches import BaseCache
-            from langchain_community.cache import SQLiteCache
-        self._inner = SQLiteCache(database_path=database_path)
-        BaseCache.register(_NormalizedSQLiteCache)
-
-    def lookup(self, prompt, llm_string):
-        return self._inner.lookup(_normalize_cache_prompt(prompt), llm_string)
-
-    async def alookup(self, prompt, llm_string):
-        return await self._inner.alookup(_normalize_cache_prompt(prompt), llm_string)
-
-    def update(self, prompt, llm_string, return_val):
-        return self._inner.update(_normalize_cache_prompt(prompt), llm_string, return_val)
-
-    async def aupdate(self, prompt, llm_string, return_val):
-        return await self._inner.aupdate(_normalize_cache_prompt(prompt), llm_string, return_val)
-
-    def clear(self, **kwargs):
-        return self._inner.clear(**kwargs)
-
-
-class ToolCache:
-    def __init__(self, db_path):
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        conn = sqlite3.connect(db_path)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS tool_cache (
-                key TEXT PRIMARY KEY,
-                content TEXT,
-                artifact TEXT,
-                is_tuple INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-        conn.close()
-
-    def _make_key(self, tool_name, args):
-        raw = json.dumps({"tool": tool_name, "args": args}, sort_keys=True, ensure_ascii=False)
-        return hashlib.sha256(raw.encode()).hexdigest()
-
-    def get(self, tool_name, args):
-        conn = sqlite3.connect(self.db_path)
-        row = conn.execute(
-            "SELECT content, artifact, is_tuple FROM tool_cache WHERE key=?",
-            (self._make_key(tool_name, args),),
-        ).fetchone()
-        conn.close()
-        if row is None:
-            return None
-        content = json.loads(row[0])
-        if row[2]:
-            artifact = json.loads(row[1])
-            return (content, artifact)
-        return content
-
-    def set(self, tool_name, args, result):
-        conn = sqlite3.connect(self.db_path)
-        key = self._make_key(tool_name, args)
-        if isinstance(result, tuple) and len(result) == 2:
-            conn.execute(
-                "INSERT OR REPLACE INTO tool_cache (key, content, artifact, is_tuple) VALUES (?, ?, ?, 1)",
-                (key, json.dumps(result[0], ensure_ascii=False), json.dumps(result[1], ensure_ascii=False)),
-            )
-        else:
-            conn.execute(
-                "INSERT OR REPLACE INTO tool_cache (key, content, artifact, is_tuple) VALUES (?, ?, '', 0)",
-                (key, json.dumps(result, ensure_ascii=False)),
-            )
-        conn.commit()
-        conn.close()
-
-
-def _get_tool_cache(cache_namespace: str = ""):
-    if os.getenv("LLM_CACHE", "").lower() not in ("sqlite",):
-        return None
-    default_db_path = os.path.join(os.path.expanduser("~"), ".cache", "tool_cache.db")
-    if cache_namespace:
-        base, ext = os.path.splitext(default_db_path)
-        default_db_path = f"{base}_{cache_namespace}{ext}"
-    db_path = os.getenv("TOOL_CACHE_DB_PATH", default_db_path)
-    if cache_namespace and os.getenv("TOOL_CACHE_DB_PATH"):
-        base, ext = os.path.splitext(db_path)
-        db_path = f"{base}_{cache_namespace}{ext}"
-    return ToolCache(db_path)
-
-
-def _wrap_tools_with_cache(tools, tool_cache):
-    if not tool_cache:
-        return tools
-    cached_tools = []
-    for tool in tools:
-        original_coroutine = getattr(tool, "coroutine", None)
-        if original_coroutine is None:
-            cached_tools.append(tool)
-            continue
-        tool_name = tool.name
-        _cache = tool_cache
-
-        async def cached_async(*args, __original=original_coroutine, __name=tool_name, __cache=_cache, **kwargs):
-            cache_kwargs = {k: v for k, v in kwargs.items() if k not in ("config", "callbacks", "run_manager", "tool_call_id")}
-            try:
-                all_args = {"args": [str(a) for a in args], "kwargs": cache_kwargs}
-                hit = __cache.get(__name, all_args)
-            except (TypeError, ValueError):
-                hit = None
-                all_args = None
-            if hit is not None:
-                return hit
-            result = await __original(*args, **kwargs)
-            if all_args is not None:
-                try:
-                    __cache.set(__name, all_args, result)
-                except (TypeError, ValueError):
-                    pass
-            return result
-
-        tool.coroutine = cached_async
-        cached_tools.append(tool)
-    return cached_tools
-
-
-_ENGLISH_ONLY_RULE = (
-    "# LANGUAGE RULE — MANDATORY\n\n"
-    "You MUST communicate exclusively in English. All responses, questions, summaries, "
-    "and clinical outputs must be in English. Do not use Portuguese or any other language."
-)
-
-LANGUAGE_RULES = {
-    "en": _ENGLISH_ONLY_RULE,
-    "pt-BR": (
-        "# REGRA DE IDIOMA — OBRIGATÓRIO\n\n"
-        "Você DEVE se comunicar EXCLUSIVAMENTE em Português do Brasil. Todas as respostas, "
-        "perguntas, resumos e saídas clínicas devem estar em Português do Brasil. Não use "
-        "inglês ou qualquer outro idioma. Cumprimente o paciente pelo nome e conduza toda "
-        "a triagem em português de forma natural e acolhedora."
-    ),
-    "auto": (
-        "# LANGUAGE RULE — MANDATORY\n\n"
-        "Detect the language used by the patient in their messages. Respond in the SAME language "
-        "the patient uses. For example: if they write in Portuguese, respond in Portuguese; if they "
-        "write in English, respond in English; if they write in Spanish, respond in Spanish — and so "
-        "on for any language. Mirror the patient's language consistently throughout the entire "
-        "conversation. Never mix languages in the same response. If the patient switches language "
-        "mid-conversation, switch accordingly."
-    ),
-}
+logger = setup_logging("agent")
 
 _VOICE_MODE_ADDENDUM = (
     "\n\n---\n\n"
@@ -245,23 +35,17 @@ You have access to three tool ecosystems (MCPs):
 
 ---
 
-# LANGUAGE RULE — MANDATORY
+# CONVERSATION RULES — EMPATHY FIRST
 
-You MUST communicate exclusively in English. All responses, questions, summaries, and clinical outputs must be in English. Do not use Portuguese or any other language.
-
----
-
-# CONVERSATION RULES — MANDATORY & INFRACTIONABLE
-
-1. Ask EXACTLY ONE question at a time to the patient. NEVER list multiple questions in the same message.
-2. NEVER repeat a question that has already been answered. Track covered topics in covered_topics.
-3. After asking a question, STOP and WAIT for the patient's answer. Do NOT ask more questions or advance steps.
-4. For each question, call `get_next_triage_question(patient_context, covered_topics, patient_initial_message)` to get the next contextual question. IMPORTANT: pass the patient's first message as patient_initial_message so the tool can skip the generic "How are you feeling?" if the patient already stated their reason for visit.
-5. After the patient answers a question, add the topic of that question to covered_topics before asking the next one.
-6. If `get_next_triage_question` returns question=null, do not ask more questions — proceed to STEP 3.
-7. NEVER ask about information already in the FHIR medical record — reference it: "I noticed in your record that you have [condition]..."
-8. Formulate each question in a natural, welcoming, and conversational manner, as a healthcare professional would speak.
-9. Follow the LANGUAGE RULE above — communicate in the patient's language.
+1. Above all, be empathetic. The patient may not be feeling well. Keep the conversation short, warm, and natural. Avoid repetitive phrasing that makes the interaction feel robotic.
+2. Ask EXACTLY ONE question at a time to the patient. NEVER list multiple questions in the same message.
+3. Avoid repeating a question that was already clearly answered. If the patient's answer was unclear or incomplete, it's okay to ask again for clarification — but rephrase naturally, don't just repeat the same words.
+4. After asking a question, STOP and WAIT for the patient's answer. Do NOT ask more questions or advance steps.
+5. For each question, call `get_next_triage_question(patient_context, covered_topics, patient_initial_message)` to get the next contextual question. IMPORTANT: pass the patient's first message as patient_initial_message so the tool can skip the generic "How are you feeling?" if the patient already stated their reason for visit.
+6. After the patient answers a question, add the topic of that question to covered_topics before asking the next one.
+7. If `get_next_triage_question` returns question=null, do not ask more questions — proceed to STEP 3.
+8. You already know the patient's conditions from FHIR. Mention a condition by name at most ONCE — the first time it becomes relevant. After that, the patient already knows — just ask follow-up questions directly. Avoid repeating "I see you have [condition]..." on every question, it feels robotic and tiresome.
+9. Formulate each question in a natural, welcoming, and conversational manner, as a healthcare professional would speak.
 10. Use accessible language for the patient, avoiding technical jargon.
 
 ---
@@ -300,7 +84,7 @@ Example of correct flow:
 - Agent: "Maria, I noticed in your record that you have diabetes. Has your blood sugar been controlled?" [STOP and wait]
 - Patient: "Not really, it's been high..."
 - Agent: [analyze_patient_response → check_red_flags → covered_topics=["diabetes_control"]] → [get_next_triage_question with covered_topics=["diabetes_control"]]
-- Agent: "I understand. Have you noticed increased thirst or urination in recent days?" [STOP and wait]
+- Agent: "I understand. Have you noticed increased thirst or urination in recent days?" [STOP and wait — no re-mention of diabetes]
 
 ## STEP 3 — Clinical Assessment (after all triage questions answered)
 Call `clinical_assessment(patient_context, triage_data)` — this single LLM-powered tool produces:
@@ -350,17 +134,16 @@ When concluding the triage, present the summary in the following format:
 """
 
 
-def get_system_prompt(language: str = "auto", voice_mode: bool = False) -> str:
-    """Build the system prompt with the given language and voice mode settings."""
-    lang_rule = LANGUAGE_RULES.get(language, LANGUAGE_RULES["en"])
-    prompt = SYSTEM_PROMPT.replace(_ENGLISH_ONLY_RULE, lang_rule)
+def get_system_prompt(voice_mode: bool = False) -> str:
+    """Build the system prompt with the given voice mode setting."""
+    prompt = SYSTEM_PROMPT
     if voice_mode:
         prompt += _VOICE_MODE_ADDENDUM
     return prompt
 
 
 def get_mcp_config():
-    return {
+    config = {
         "fhir_server": {
             "transport": "http",
             "url": os.getenv("FHIR_MCP_URL", "http://localhost:8000/mcp"),
@@ -374,22 +157,76 @@ def get_mcp_config():
             "url": os.getenv("CR_MCP_URL", "http://localhost:8002/mcp"),
         },
     }
+    logger.debug("MCP config: fhir=%s triage=%s cr=%s", config["fhir_server"]["url"], config["triage_server"]["url"], config["clinical_reasoning_server"]["url"])
+    return config
 
 
-async def create_triage_agent(language: str = "auto", voice_mode: bool = False, cache_namespace: str = ""):
+def _fix_tool_args_schema(tools):
+    fixed = []
+    for tool in tools:
+        if not isinstance(tool, StructuredTool):
+            fixed.append(tool)
+            continue
+        schema = tool.args_schema
+        if isinstance(schema, dict) and schema.get("properties"):
+            try:
+                props = schema.get("properties", {})
+                required = set(schema.get("required", []))
+                field_defs = {}
+                for pname, pval in props.items():
+                    ptype = str
+                    ann = pval.get("type", "string")
+                    if ann == "array":
+                        ptype = list
+                    elif ann == "integer":
+                        ptype = int
+                    elif ann == "number":
+                        ptype = float
+                    elif ann == "boolean":
+                        ptype = bool
+                    default = ... if pname in required else pval.get("default", None)
+                    field_defs[pname] = (ptype, default)
+                model = create_model(
+                    f"{tool.name}_input",
+                    __config__={"extra": "allow"},
+                    **field_defs,
+                )
+                new_tool = StructuredTool(
+                    name=tool.name,
+                    description=tool.description or "",
+                    args_schema=model,
+                    coroutine=tool.coroutine,
+                    response_format=tool.response_format,
+                    metadata=tool.metadata,
+                )
+                logger.debug("Fixed args_schema for tool: %s", tool.name)
+                fixed.append(new_tool)
+                continue
+            except Exception as e:
+                logger.warning("Could not fix args_schema for %s: %s", tool.name, e)
+        fixed.append(tool)
+    return fixed
+
+
+async def create_triage_agent(voice_mode: bool = False, cache_namespace: str = ""):
+    logger.info("Creating triage agent | voice_mode=%s | cache_ns=%s", voice_mode, cache_namespace or "(none)")
     client = MultiServerMCPClient(get_mcp_config())
 
     all_tools = await client.get_tools()
 
-    print(f"Total tools loaded: {len(all_tools)}")
+    logger.info("Total tools loaded: %d", len(all_tools))
+    for t in all_tools:
+        logger.debug("Tool available: %s | args_schema type: %s", t.name, type(t.args_schema).__name__)
 
-    llm_cache = _get_llm_cache(cache_namespace)
-    tool_cache = _get_tool_cache(cache_namespace)
+    all_tools = _fix_tool_args_schema(all_tools)
+
+    llm_cache = get_llm_cache(cache_namespace)
+    tool_cache = get_tool_cache(cache_namespace)
 
     if llm_cache or tool_cache:
-        print(f"Cache enabled: LLM={os.getenv('LLM_CACHE')}, Tools={'sqlite' if tool_cache else 'off'}")
+        logger.info("Cache enabled: LLM=%s | Tools=%s", os.getenv("LLM_CACHE"), "sqlite" if tool_cache else "off")
 
-    all_tools = _wrap_tools_with_cache(all_tools, tool_cache)
+    all_tools = wrap_tools_with_cache(all_tools, tool_cache)
 
     model_kwargs = {}
     if llm_cache is not None:
@@ -399,9 +236,10 @@ async def create_triage_agent(language: str = "auto", voice_mode: bool = False, 
     agent = create_agent(
         model,
         all_tools,
-        system_prompt=get_system_prompt(language, voice_mode),
+        system_prompt=get_system_prompt(voice_mode),
     )
 
+    logger.info("Triage agent created successfully")
     return agent, client
 
 

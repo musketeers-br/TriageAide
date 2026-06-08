@@ -4,34 +4,47 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+from logging_config import setup_logging
 
 load_dotenv(override=True)
+
+logger = setup_logging("triage_server", "triage_server.log")
 
 mcp = FastMCP("TriageServer")
 
 _llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3, max_tokens=800)
 
+logger.info("Triage MCP Server initializing | model=gpt-4o-mini")
+
 
 async def _llm_json(system_prompt: str, user_prompt: str, fallback: dict = None) -> str:
+    logger.debug("LLM call | system_prompt_len=%d | user_prompt_len=%d", len(system_prompt), len(user_prompt))
+    logger.debug("LLM call | user_prompt: %.500s", user_prompt)
     try:
         response = await _llm.ainvoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ])
         content = response.content
+        logger.debug("LLM response | raw_len=%d | first 500 chars: %.500s", len(content), content)
         if content.strip().startswith("```"):
             lines = content.strip().split("\n")
             lines = [l for l in lines if not l.strip().startswith("```")]
             content = "\n".join(lines)
         parsed = json.loads(content)
+        logger.debug("LLM response | parsed JSON keys=%s", list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__)
         return json.dumps(parsed, ensure_ascii=False)
     except json.JSONDecodeError:
         raw = response.content if 'response' in dir() else ""
+        logger.warning("LLM returned invalid JSON | raw: %.300s", raw[:300])
         if fallback is not None:
+            logger.info("Using fallback response")
             return json.dumps(fallback, ensure_ascii=False)
         return json.dumps({"error": "LLM returned invalid JSON", "raw": raw[:500]}, ensure_ascii=False)
     except Exception as e:
+        logger.error("LLM call failed: %s: %s", type(e).__name__, str(e)[:300])
         if fallback is not None:
+            logger.info("Using fallback response after error")
             return json.dumps(fallback, ensure_ascii=False)
         return json.dumps({"error": f"LLM call failed: {type(e).__name__}: {str(e)[:300]}"}, ensure_ascii=False)
 
@@ -43,8 +56,9 @@ Given the patient's FHIR medical history, the topics already covered in conversa
 Rules:
 - If the patient's initial message already states their reason for visit or symptoms, do NOT ask "How are you feeling today?" — instead, acknowledge what they shared and ask the first relevant condition-specific follow-up.
 - Ask about the most clinically urgent topic first: red-flag symptoms related to existing conditions, then condition control, then medication side effects, then general changes.
-- NEVER ask about information already in the FHIR record — reference it instead.
-- NEVER repeat a topic that is already in covered_topics.
+- Reference a condition from the FHIR record at most ONCE — in the first question where it becomes relevant. After that, ask follow-up questions naturally without re-stating the condition name. The patient already knows.
+- Do not repeat a topic that is already in covered_topics, unless the patient's answer was unclear or incomplete and you need to clarify.
+- Be empathetic and concise. The patient may be unwell — avoid repetitive phrasing that makes the conversation feel robotic or tiresome.
 - Formulate the question in a natural, welcoming, conversational manner — as a healthcare professional would speak to a patient.
 - Each question should cover exactly ONE clinical topic.
 
@@ -135,16 +149,17 @@ Return a JSON object:
 @mcp.tool()
 async def get_next_triage_question(
     patient_context: str,
-    covered_topics: list[str] = None,
+    covered_topics: list[str] = [],
     patient_initial_message: str = "",
 ) -> str:
     """Returns the NEXT triage question (one at a time) based on FHIR history, already covered topics, and optionally the patient's initial message. If the initial message already states the reason for visit, the tool skips the generic opener and goes directly to condition-specific questions. patient_context = JSON with patient data. covered_topics = list of already answered topics. patient_initial_message = the patient's first message to the agent (optional)."""
+    logger.info("get_next_triage_question | covered_topics=%s | initial_msg=%.80s", covered_topics, patient_initial_message[:80] if patient_initial_message else "")
     try:
         ctx = json.loads(patient_context)
     except json.JSONDecodeError:
         return json.dumps({"error": "patient_context must be valid JSON"}, ensure_ascii=False)
 
-    covered = covered_topics if covered_topics else []
+    covered = covered_topics or []
 
     ctx_summary = json.dumps(ctx, ensure_ascii=False)[:2000]
     user_prompt = f"""Patient FHIR context:
@@ -163,7 +178,9 @@ Determine the next question to ask. Return JSON with question, topic, remaining_
         "total_remaining": 0,
     }
 
-    return await _llm_json(_Q_SYSTEM, user_prompt, fallback=fallback)
+    result = await _llm_json(_Q_SYSTEM, user_prompt, fallback=fallback)
+    logger.debug("get_next_triage_question | result: %.200s", result[:200])
+    return result
 
 
 @mcp.tool()
@@ -172,6 +189,7 @@ async def analyze_patient_response(
     patient_context: str = "{}",
 ) -> str:
     """Extracts and structures symptoms, duration, and severity from the patient's response using clinical reasoning. Handles synonyms, Portuguese, negation, and clinical context. patient_response = free text of the patient's response. patient_context = JSON with patient data (optional, for clinical context)."""
+    logger.info("analyze_patient_response | response=%.100s", patient_response[:100])
     try:
         ctx = json.loads(patient_context)
     except (json.JSONDecodeError, TypeError):
@@ -193,16 +211,22 @@ Extract structured symptom data from this response. Return JSON with raw_respons
         "overall_severity": "mild",
     }
 
-    return await _llm_json(_A_SYSTEM, user_prompt, fallback=fallback)
+    result = await _llm_json(_A_SYSTEM, user_prompt, fallback=fallback)
+    logger.debug("analyze_patient_response | result: %.300s", result[:300])
+    return result
 
 
 @mcp.tool()
 async def check_red_flags(
-    symptoms: list,
-    conditions: list,
-    medications: list = None,
+    symptoms: list | str,
+    conditions: list | str,
+    medications: list | str | None = None,
 ) -> str:
     """Checks warning signs (red flags) by cross-referencing current symptoms with existing conditions and active medications using clinical reasoning. Detects drug-symptom interactions. symptoms = JSON list of identified symptoms (from analyze_patient_response). conditions = JSON list of active conditions. medications = JSON list of medications (optional but recommended for drug interaction detection)."""
+    logger.info("check_red_flags | symptoms=%d | conditions=%d | medications=%s", 
+                len(symptoms) if isinstance(symptoms, list) else 1,
+                len(conditions) if isinstance(conditions, list) else 1,
+                len(medications) if isinstance(medications, list) else 0)
     try:
         if symptoms is None:
             symptom_list = []
@@ -250,7 +274,11 @@ Check for red flags and dangerous combinations. Return JSON with alerts, has_cri
         "alert_count": 0,
     }
 
-    return await _llm_json(_RF_SYSTEM, user_prompt, fallback=fallback)
+    result = await _llm_json(_RF_SYSTEM, user_prompt, fallback=fallback)
+    logger.info("check_red_flags | alerts=%d | critical=%s",
+                json.loads(result).get("alert_count", 0) if result else 0,
+                json.loads(result).get("has_critical_red_flag", False) if result else False)
+    return result
 
 
 @mcp.tool()
@@ -260,6 +288,7 @@ async def build_questionnaire_response_data(
     answers: list,
 ) -> str:
     """Builds data structure for FHIR QuestionnaireResponse ready to be saved. questions = JSON list of questions, answers = JSON list of answers (same order)."""
+    logger.info("build_questionnaire_response_data | patient_id=%s | questions=%d", patient_id, len(questions) if isinstance(questions, list) else 1)
     try:
         if questions is None:
             q_list = []
@@ -291,4 +320,5 @@ async def build_questionnaire_response_data(
 
 
 if __name__ == "__main__":
+    logger.info("Starting Triage MCP Server on port 8001...")
     mcp.run(transport="streamable-http", host="0.0.0.0", port=8001)

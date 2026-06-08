@@ -138,6 +138,23 @@ Replaced all deterministic keyword-matching and scoring tools with LLM-powered e
 
 - **app.py**: 10 natural conversation examples (8 English + 2 Portuguese) replacing 6 robotic keyword-targeted ones
 
+### Phase 14: Structured Logging
+
+- Created `logging_config.py` — centralized logging config with `LOG_LEVEL` env var (default: `DEBUG`)
+- Dual output: stderr (visible via `docker compose logs`) + file handlers in `/tmp/` per module
+- Instrumented all 10 Python files with structured logging:
+  - `fhir_server.py` — DEBUG: FHIR request/response payloads (URL, params, status, bytes); INFO: tool calls, resource creation; ERROR: HTTP errors
+  - `triage_server.py` — DEBUG: LLM prompts/responses (500 chars); INFO: tool calls; WARNING: invalid JSON, fallbacks
+  - `clinical_reasoning_server.py` — same pattern as triage_server
+  - `agent.py` — replaced `print()` with logger; DEBUG: tool names, MCP URLs; INFO: agent creation, cache status
+  - `app.py` — INFO: agent init, chat submissions, tool start/end; DEBUG: tool results; ERROR: failures; retry logic for agent init
+  - `cli.py` — DEBUG: user input, agent response; INFO: startup/exit
+  - `seed_data.py` — replaced all `print()` with logger; DEBUG: HTTP calls; INFO: resource creation; ERROR: failures
+  - `cache.py` — DEBUG: cache HIT/MISS; INFO: cache init
+  - `voice_bridge.py` — refactored to use `setup_logging()`; retry logic for agent init
+- Updated `entrypoint.sh` and `start_servers.sh` — removed `> /tmp/xxx.log 2>&1` redirects (FileHandler does it now); added `LOG_LEVEL` default
+- Verified: `LOG_LEVEL=DEBUG` shows FHIR request/response details, tool names, cache HIT/MISS; `LOG_LEVEL=INFO` shows key decisions only
+
 ### Phase 13: Bug Fixes and E2E Testing
 
 **Bug: cli.py indentation error** — `if ai_response:` block was at wrong indentation level (same as `try:` instead of inside `try:`), causing SyntaxError. Fixed by moving `if/else` and `messages = response_messages` inside the `try` block.
@@ -240,6 +257,7 @@ From the triage container, use `http://iris:52773/fhir/r4` (Docker DNS resolves 
 | seed_data.py with `triage-seed` tag | Manual resource removal | Tag allows automatic `clean`: removes all resources with the tag, without needing to track IDs. |
 | System prompt embedded in code | External prompt in file | Simplifies deployment (1 fewer file). If it needs to be configurable, extract to file later. |
 | LLM SQLite caching | No caching | Reduces OpenAI API costs during development. Cache keys are normalized to hit across identical invocations. |
+| Structured logging (logging_config.py) | dictConfig / per-file setup | Centralized `setup_logging()` with LOG_LEVEL env var, consistent format, dual output (stderr + file). One config point for all modules. |
 
 ---
 
@@ -266,6 +284,7 @@ From the triage container, use `http://iris:52773/fhir/r4` (Docker DNS resolves 
 - [x] 10 natural conversation examples in Gradio UI (8 English + 2 Portuguese)
 - [x] cli.py indentation bug fix
 - [x] seed_data.py bug fixes (duplicate patients, silent failure, reload command)
+- [x] Structured logging of all modules (logging_config.py, LOG_LEVEL env var, stderr + file handlers)
 
 ### Pending / Needs Attention
 
@@ -280,5 +299,4 @@ From the triage container, use `http://iris:52773/fhir/r4` (Docker DNS resolves 
 - [ ] Prompt refinement to ensure consistent creation of QuestionnaireResponse and Tasks
 - [ ] Contest submission preparation
 - [ ] Automated tests (currently only manual tests via curl/Gradio)
-- [ ] Structured logging of MCP servers
 - [ ] Health check endpoints in MCP servers

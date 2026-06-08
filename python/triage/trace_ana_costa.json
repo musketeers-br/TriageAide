@@ -1,0 +1,232 @@
+{
+  "turn_1": {
+    "user_message": "Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever",
+    "agent_response": "Ana, I appreciate you sharing your symptoms with me. Have you noticed any difficulty swallowing or any swelling in your neck?",
+    "elapsed": 9.8,
+    "trace": "  LLM Reasoning #1 ...\n\n  STEP 1 — FHIR Query\n    -> search_patients(name=\"Ana Costa\")\n       Args: {\n  \"name\": \"Ana Costa\"\n}\n    <- search_patients . 1 patient(s) found (0.1s)\n       Result: {\"total\": 1, \"patients\": [{\"id\": \"2191\", \"name\": \"Ana Costa\", \"gender\": \"female\", \"birthDate\": \"1998-07-22\"}]}\n  LLM Reasoning #2 ...\n    -> get_patient(patient_id=2191)\n       Args: {\n  \"patient_id\": \"2191\"\n}\n    -> get_patient_conditions(patient_id=2191)\n       Args: {\n  \"patient_id\": \"2191\"\n}\n    -> get_patient_medications(patient_id=2191)\n       Args: {\n  \"patient_id\": \"2191\"\n}\n    -> get_patient_observations(patient_id=2191)\n       Args: {\n  \"patient_id\": \"2191\"\n}\n    -> get_patient_allergies(patient_id=2191)\n       Args: {\n  \"patient_id\": \"2191\"\n}\n    -> get_patient_encounters(patient_id=2191)\n       Args: {\n  \"patient_id\": \"2191\"\n}\n    <- get_patient_conditions . 1 conditions retrieved (0.3s)\n       Result: {\"total\": 1, \"conditions\": [{\"id\": \"2192\", \"status\": \"resolved\", \"display\": \"Amigdalite aguda\", \"icd10\": \"J03.9\", \"onset\": \"2024-08-10\", \"abatement\": \"2024-08-20\"}]}\n    <- get_patient_observations . 2 observations retrieved (0.3s)\n       Result: {\"total\": 2, \"observations\": [{\"id\": \"2193\", \"display\": \"IMC\", \"loinc\": \"39156-5\", \"value\": 22.0, \"unit\": \"kg/m2\", \"date\": \"2024-03-15T10:00:00-03:00\", \"interpretation\": \"\"}, {\"id\": \"2194\", \"display\": \"Pressao arterial\", \"loinc\": \"85354-9\", \"value\": null, \"unit\": \"\", \"date\": \"2024-03-15T10:00:00-03:00\", \"interpretation\": \"\", \"components\": [\"Systolic blood pressure: 110 mmHg\", \"Diastolic blood pressure: 70 mmHg\"]}]}\n    <- get_patient_medications . 0 medications retrieved (0.3s)\n       Result: {\"total\": 0, \"medications\": []}\n    <- get_patient_encounters . 1 encounters retrieved (0.4s)\n       Result: {\"total\": 1, \"encounters\": [{\"id\": \"2195\", \"status\": \"finished\", \"type\": [\"Check-up anual\"], \"start\": \"2024-03-15T10:00:00-03:00\", \"end\": \"2024-03-15T10:30:00-03:00\"}]}\n    <- get_patient . Ana Costa, DOB 1998-07-22 (0.4s)\n       Result: {\"id\": \"2191\", \"name\": \"Ana Costa\", \"gender\": \"female\", \"birthDate\": \"1998-07-22\", \"identifier\": [\"ana-costa-1998\"]}\n    <- get_patient_allergies . 0 allergies retrieved (0.4s)\n       Result: {\"total\": 0, \"allergies\": []}\n  LLM Reasoning #3 ...\n\n  STEP 2 — Triage Questions\n    -> get_next_triage_question(patient_context={\"id\":\"2191\",\"name\":\"Ana Costa\",\"gender\":\"female\",\"birthDate\":\"1998-07-22\",\"conditions\":[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}],\"medications\":[],\"observations\":[{\"id\":\"2193\",\"display\":\"IMC\",\"loinc\":\"39156-5\",\"value\":22,\"unit\":\"kg/m2\",\"date\":\"2024-03-15T10:00:00-03:00\"},{\"id\":\"2194\",\"display\":\"Pressao arterial\",\"loinc\":\"85354-9\",\"value\":null,\"unit\":\"\",\"date\":\"2024-03-15T10:00:00-03:00\",\"components\":[\"Systolic blood pressure: 110 mmHg\",\"Diastolic blood pressure: 70 mmHg\"]}],\"allergies\":[],\"encounters\":[{\"id\":\"2195\",\"status\":\"finished\",\"type\":[\"Check-up anual\"],\"start\":\"2024-03-15T10:00:00-03:00\",\"end\":\"2024-03-15T10:30:00-03:00\"}]}, covered_topics=[], patient_initial_message=Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever)\n       Args: {\n  \"patient_context\": \"{\\\"id\\\":\\\"2191\\\",\\\"name\\\":\\\"Ana Costa\\\",\\\"gender\\\":\\\"female\\\",\\\"birthDate\\\":\\\"1998-07-22\\\",\\\"conditions\\\":[{\\\"id\\\":\\\"2192\\\",\\\"status\\\":\\\"resolved\\\",\\\"display\\\":\\\"Amigdalite aguda\\\"}],\\\"medications\\\":[],\\\"observations\\\":[{\\\"id\\\":\\\"2193\\\",\\\"display\\\":\\\"IMC\\\",\\\"loinc\\\":\\\"39156-5\\\",\\\"value\\\":22,\\\"unit\\\":\\\"kg/m2\\\",\\\"date\\\":\\\"2024-03-15T10:00:00-03:00\\\"},{\\\"id\\\":\\\"2194\\\",\\\"display\\\":\\\"Pressao arterial\\\",\\\"loinc\\\":\\\"85354-9\\\",\\\"value\\\":null,\\\"unit\\\":\\\"\\\",\\\"date\\\":\\\"2024-03-15T10:00:00-03:00\\\",\\\"components\\\":[\\\"Systolic blood pressure: 110 mmHg\\\",\\\"Diastolic blood pressure: 70 \n    <- get_next_triage_question . \"Have you noticed any difficulty swallowing or any swelling i...\" (0 remaining) (1.6s)\n       Result: {\"question\": \"Have you noticed any difficulty swallowing or any swelling in your neck?\", \"topic\": \"red_flag_symptoms\", \"remaining_topics\": [], \"total_remaining\": 0}\n  LLM Reasoning #4 ...",
+    "events": [
+      {
+        "type": "llm_start",
+        "llm_num": 1,
+        "run_id": "019e9fdb-aa96-7e22-bb18-12ffc41388f1"
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "search_patients",
+        "run_id": "019e9fdb-aea8-77c3-9672-d78c179bb1d4",
+        "tool_input": {
+          "name": "Ana Costa"
+        }
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "search_patients",
+        "run_id": "019e9fdb-aea8-77c3-9672-d78c179bb1d4",
+        "output": "{\"total\": 1, \"patients\": [{\"id\": \"2191\", \"name\": \"Ana Costa\", \"gender\": \"female\", \"birthDate\": \"1998-07-22\"}]}",
+        "elapsed": 0.1
+      },
+      {
+        "type": "llm_start",
+        "llm_num": 2,
+        "run_id": "019e9fdb-af1c-7a50-bdec-08fe817a9d5e"
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_patient",
+        "run_id": "019e9fdb-b593-71e0-9719-f5622212e43c",
+        "tool_input": {
+          "patient_id": "2191"
+        }
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_patient_conditions",
+        "run_id": "019e9fdb-b594-7e22-9345-67b9bc0f589a",
+        "tool_input": {
+          "patient_id": "2191"
+        }
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_patient_medications",
+        "run_id": "019e9fdb-b595-7b11-a73a-90b7dd59e7cc",
+        "tool_input": {
+          "patient_id": "2191"
+        }
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_patient_observations",
+        "run_id": "019e9fdb-b596-7f20-956d-e599fffb01de",
+        "tool_input": {
+          "patient_id": "2191"
+        }
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_patient_allergies",
+        "run_id": "019e9fdb-b597-7792-86b4-e5e5127ccfed",
+        "tool_input": {
+          "patient_id": "2191"
+        }
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_patient_encounters",
+        "run_id": "019e9fdb-b597-7792-86b4-e5fdcce40766",
+        "tool_input": {
+          "patient_id": "2191"
+        }
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_patient_conditions",
+        "run_id": "019e9fdb-b594-7e22-9345-67b9bc0f589a",
+        "output": "{\"total\": 1, \"conditions\": [{\"id\": \"2192\", \"status\": \"resolved\", \"display\": \"Amigdalite aguda\", \"icd10\": \"J03.9\", \"onset\": \"2024-08-10\", \"abatement\": \"2024-08-20\"}]}",
+        "elapsed": 0.3
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_patient_observations",
+        "run_id": "019e9fdb-b596-7f20-956d-e599fffb01de",
+        "output": "{\"total\": 2, \"observations\": [{\"id\": \"2193\", \"display\": \"IMC\", \"loinc\": \"39156-5\", \"value\": 22.0, \"unit\": \"kg/m2\", \"date\": \"2024-03-15T10:00:00-03:00\", \"interpretation\": \"\"}, {\"id\": \"2194\", \"display\": \"Pressao arterial\", \"loinc\": \"85354-9\", \"value\": null, \"unit\": \"\", \"date\": \"2024-03-15T10:00:00-03:00\", \"interpretation\": \"\", \"components\": [\"Systolic blood pressure: 110 mmHg\", \"Diastolic blood pressure: 70 mmHg\"]}]}",
+        "elapsed": 0.3
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_patient_medications",
+        "run_id": "019e9fdb-b595-7b11-a73a-90b7dd59e7cc",
+        "output": "{\"total\": 0, \"medications\": []}",
+        "elapsed": 0.3
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_patient_encounters",
+        "run_id": "019e9fdb-b597-7792-86b4-e5fdcce40766",
+        "output": "{\"total\": 1, \"encounters\": [{\"id\": \"2195\", \"status\": \"finished\", \"type\": [\"Check-up anual\"], \"start\": \"2024-03-15T10:00:00-03:00\", \"end\": \"2024-03-15T10:30:00-03:00\"}]}",
+        "elapsed": 0.4
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_patient",
+        "run_id": "019e9fdb-b593-71e0-9719-f5622212e43c",
+        "output": "{\"id\": \"2191\", \"name\": \"Ana Costa\", \"gender\": \"female\", \"birthDate\": \"1998-07-22\", \"identifier\": [\"ana-costa-1998\"]}",
+        "elapsed": 0.4
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_patient_allergies",
+        "run_id": "019e9fdb-b597-7792-86b4-e5e5127ccfed",
+        "output": "{\"total\": 0, \"allergies\": []}",
+        "elapsed": 0.4
+      },
+      {
+        "type": "llm_start",
+        "llm_num": 3,
+        "run_id": "019e9fdb-b742-71c1-8160-b04f891e9893"
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_next_triage_question",
+        "run_id": "019e9fdb-c758-7e21-acc7-92f774decfcc",
+        "tool_input": {
+          "patient_context": "{\"id\":\"2191\",\"name\":\"Ana Costa\",\"gender\":\"female\",\"birthDate\":\"1998-07-22\",\"conditions\":[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}],\"medications\":[],\"observations\":[{\"id\":\"2193\",\"display\":\"IMC\",\"loinc\":\"39156-5\",\"value\":22,\"unit\":\"kg/m2\",\"date\":\"2024-03-15T10:00:00-03:00\"},{\"id\":\"2194\",\"display\":\"Pressao arterial\",\"loinc\":\"85354-9\",\"value\":null,\"unit\":\"\",\"date\":\"2024-03-15T10:00:00-03:00\",\"components\":[\"Systolic blood pressure: 110 mmHg\",\"Diastolic blood pressure: 70 mmHg\"]}],\"allergies\":[],\"encounters\":[{\"id\":\"2195\",\"status\":\"finished\",\"type\":[\"Check-up anual\"],\"start\":\"2024-03-15T10:00:00-03:00\",\"end\":\"2024-03-15T10:30:00-03:00\"}]}",
+          "covered_topics": [],
+          "patient_initial_message": "Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever"
+        }
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_next_triage_question",
+        "run_id": "019e9fdb-c758-7e21-acc7-92f774decfcc",
+        "output": "{\"question\": \"Have you noticed any difficulty swallowing or any swelling in your neck?\", \"topic\": \"red_flag_symptoms\", \"remaining_topics\": [], \"total_remaining\": 0}",
+        "elapsed": 1.6
+      },
+      {
+        "type": "llm_start",
+        "llm_num": 4,
+        "run_id": "019e9fdb-cd96-78c0-bd28-9b660ca2f147"
+      }
+    ]
+  },
+  "turn_2": {
+    "user_message": "No, I don't have any difficulty breathing or swallowing. Just a scratchy throat and slight temperature.",
+    "agent_response": "Thank you for the clarification, Ana. Just to be thorough, have you noticed any difficulty breathing or swallowing since your sore throat started?",
+    "elapsed": 16.0,
+    "trace": "  LLM Reasoning #1 ...\n\n  STEP 2 — Triage Questions\n    -> analyze_patient_response(patient_response=No, I don't have any difficulty breathing or swallowing. Just a scratchy throat and slight temperature., patient_context={\"id\":\"2191\",\"name\":\"Ana Costa\",\"gender\":\"female\",\"birthDate\":\"1998-07-22\",\"conditions\":[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}],\"medications\":[],\"observations\":[{\"id\":\"2193\",\"display\":\"IMC\",\"loinc\":\"39156-5\",\"value\":22,\"unit\":\"kg/m2\",\"date\":\"2024-03-15T10:00:00-03:00\"},{\"id\":\"2194\",\"display\":\"Pressao arterial\",\"loinc\":\"85354-9\",\"value\":null,\"unit\":\"\",\"date\":\"2024-03-15T10:00:00-03:00\",\"components\":[\"Systolic blood pressure: 110 mmHg\",\"Diastolic blood pressure: 70 mmHg\"]}],\"allergies\":[],\"encounters\":[{\"id\":\"2195\",\"status\":\"finished\",\"type\":[\"Check-up anual\"],\"start\":\"2024-03-15T10:00:00-03:00\",\"end\":\"2024-03-15T10:30:00-03:00\"}]})\n       Args: {\n  \"patient_response\": \"No, I don't have any difficulty breathing or swallowing. Just a scratchy throat and slight temperature.\",\n  \"patient_context\": \"{\\\"id\\\":\\\"2191\\\",\\\"name\\\":\\\"Ana Costa\\\",\\\"gender\\\":\\\"female\\\",\\\"birthDate\\\":\\\"1998-07-22\\\",\\\"conditions\\\":[{\\\"id\\\":\\\"2192\\\",\\\"status\\\":\\\"resolved\\\",\\\"display\\\":\\\"Amigdalite aguda\\\"}],\\\"medications\\\":[],\\\"observations\\\":[{\\\"id\\\":\\\"2193\\\",\\\"display\\\":\\\"IMC\\\",\\\"loinc\\\":\\\"39156-5\\\",\\\"value\\\":22,\\\"unit\\\":\\\"kg/m2\\\",\\\"date\\\":\\\"2024-03-15T10:00:00-03:00\\\"},{\\\"id\\\":\\\"2194\\\",\\\"display\\\":\\\"Pressao arterial\\\",\\\"loinc\\\":\\\"85354-9\\\",\\\"value\\\":null,\\\"unit\\\":\n    <- analyze_patient_response . 2 symptom(s), severity=mild (2.4s)\n       Result: {\"raw_response\": \"No, I don't have any difficulty breathing or swallowing. Just a scratchy throat and slight temperature.\", \"identified_symptoms\": [{\"symptom\": \"sore throat\", \"category\": \"general\", \"severity\": \"mild\"}, {\"symptom\": \"fever\", \"category\": \"general\", \"severity\": \"mild\"}], \"duration\": \"\", \"overall_severity\": \"mild\"}\n  LLM Reasoning #2 ...\n\n  STEP 3 — Red Flags Check\n    -> check_red_flags(symptoms=[{\"symptom\":\"sore throat\",\"category\":\"general\",\"severity\":\"mild\"},{\"symptom\":\"fever\",\"category\":\"general\",\"severity\":\"mild\"}], conditions=[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}], medications=)\n       Args: {\n  \"symptoms\": \"[{\\\"symptom\\\":\\\"sore throat\\\",\\\"category\\\":\\\"general\\\",\\\"severity\\\":\\\"mild\\\"},{\\\"symptom\\\":\\\"fever\\\",\\\"category\\\":\\\"general\\\",\\\"severity\\\":\\\"mild\\\"}]\",\n  \"conditions\": \"[{\\\"id\\\":\\\"2192\\\",\\\"status\\\":\\\"resolved\\\",\\\"display\\\":\\\"Amigdalite aguda\\\"}]\",\n  \"medications\": \"\"\n}\n    <- check_red_flags . 0 alert(s) (0.8s)\n       Result: {\"alerts\": [], \"has_critical_red_flag\": false, \"alert_count\": 0}\n  LLM Reasoning #3 ...\n\n  STEP 2 — Triage Questions\n    -> get_next_triage_question(patient_context={\"id\":\"2191\",\"name\":\"Ana Costa\",\"gender\":\"female\",\"birthDate\":\"1998-07-22\",\"conditions\":[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}],\"medications\":[],\"observations\":[{\"id\":\"2193\",\"display\":\"IMC\",\"loinc\":\"39156-5\",\"value\":22,\"unit\":\"kg/m2\",\"date\":\"2024-03-15T10:00:00-03:00\"},{\"id\":\"2194\",\"display\":\"Pressao arterial\",\"loinc\":\"85354-9\",\"value\":null,\"unit\":\"\",\"date\":\"2024-03-15T10:00:00-03:00\",\"components\":[\"Systolic blood pressure: 110 mmHg\",\"Diastolic blood pressure: 70 mmHg\"]}],\"allergies\":[],\"encounters\":[{\"id\":\"2195\",\"status\":\"finished\",\"type\":[\"Check-up anual\"],\"start\":\"2024-03-15T10:00:00-03:00\",\"end\":\"2024-03-15T10:30:00-03:00\"}]}, covered_topics=['red_flag_symptoms'], patient_initial_message=Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever)\n       Args: {\n  \"patient_context\": \"{\\\"id\\\":\\\"2191\\\",\\\"name\\\":\\\"Ana Costa\\\",\\\"gender\\\":\\\"female\\\",\\\"birthDate\\\":\\\"1998-07-22\\\",\\\"conditions\\\":[{\\\"id\\\":\\\"2192\\\",\\\"status\\\":\\\"resolved\\\",\\\"display\\\":\\\"Amigdalite aguda\\\"}],\\\"medications\\\":[],\\\"observations\\\":[{\\\"id\\\":\\\"2193\\\",\\\"display\\\":\\\"IMC\\\",\\\"loinc\\\":\\\"39156-5\\\",\\\"value\\\":22,\\\"unit\\\":\\\"kg/m2\\\",\\\"date\\\":\\\"2024-03-15T10:00:00-03:00\\\"},{\\\"id\\\":\\\"2194\\\",\\\"display\\\":\\\"Pressao arterial\\\",\\\"loinc\\\":\\\"85354-9\\\",\\\"value\\\":null,\\\"unit\\\":\\\"\\\",\\\"date\\\":\\\"2024-03-15T10:00:00-03:00\\\",\\\"components\\\":[\\\"Systolic blood pressure: 110 mmHg\\\",\\\"Diastolic blood pressure: 70 \n    <- get_next_triage_question . \"Have you noticed any difficulty breathing or swallowing sinc...\" (0 remaining) (1.2s)\n       Result: {\"question\": \"Have you noticed any difficulty breathing or swallowing since your sore throat started?\", \"topic\": \"red_flag_symptoms\", \"remaining_topics\": [], \"total_remaining\": 0}\n  LLM Reasoning #4 ...",
+    "events": [
+      {
+        "type": "llm_start",
+        "llm_num": 1,
+        "run_id": "019e9fdb-d0eb-7353-9c09-927238cfebb4"
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "analyze_patient_response",
+        "run_id": "019e9fdb-e296-7842-b5aa-f959a94df2a0",
+        "tool_input": {
+          "patient_response": "No, I don't have any difficulty breathing or swallowing. Just a scratchy throat and slight temperature.",
+          "patient_context": "{\"id\":\"2191\",\"name\":\"Ana Costa\",\"gender\":\"female\",\"birthDate\":\"1998-07-22\",\"conditions\":[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}],\"medications\":[],\"observations\":[{\"id\":\"2193\",\"display\":\"IMC\",\"loinc\":\"39156-5\",\"value\":22,\"unit\":\"kg/m2\",\"date\":\"2024-03-15T10:00:00-03:00\"},{\"id\":\"2194\",\"display\":\"Pressao arterial\",\"loinc\":\"85354-9\",\"value\":null,\"unit\":\"\",\"date\":\"2024-03-15T10:00:00-03:00\",\"components\":[\"Systolic blood pressure: 110 mmHg\",\"Diastolic blood pressure: 70 mmHg\"]}],\"allergies\":[],\"encounters\":[{\"id\":\"2195\",\"status\":\"finished\",\"type\":[\"Check-up anual\"],\"start\":\"2024-03-15T10:00:00-03:00\",\"end\":\"2024-03-15T10:30:00-03:00\"}]}"
+        }
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "analyze_patient_response",
+        "run_id": "019e9fdb-e296-7842-b5aa-f959a94df2a0",
+        "output": "{\"raw_response\": \"No, I don't have any difficulty breathing or swallowing. Just a scratchy throat and slight temperature.\", \"identified_symptoms\": [{\"symptom\": \"sore throat\", \"category\": \"general\", \"severity\": \"mild\"}, {\"symptom\": \"fever\", \"category\": \"general\", \"severity\": \"mild\"}], \"duration\": \"\", \"overall_severity\": \"mild\"}",
+        "elapsed": 2.4
+      },
+      {
+        "type": "llm_start",
+        "llm_num": 2,
+        "run_id": "019e9fdb-ec05-74d0-80f4-13e901d9ec96"
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "check_red_flags",
+        "run_id": "019e9fdb-f48f-7af3-b955-0d3ea61e0675",
+        "tool_input": {
+          "symptoms": "[{\"symptom\":\"sore throat\",\"category\":\"general\",\"severity\":\"mild\"},{\"symptom\":\"fever\",\"category\":\"general\",\"severity\":\"mild\"}]",
+          "conditions": "[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}]",
+          "medications": ""
+        }
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "check_red_flags",
+        "run_id": "019e9fdb-f48f-7af3-b955-0d3ea61e0675",
+        "output": "{\"alerts\": [], \"has_critical_red_flag\": false, \"alert_count\": 0}",
+        "elapsed": 0.8
+      },
+      {
+        "type": "llm_start",
+        "llm_num": 3,
+        "run_id": "019e9fdb-f7ef-7273-a61d-bf0282d6b693"
+      },
+      {
+        "type": "tool_start",
+        "tool_name": "get_next_triage_question",
+        "run_id": "019e9fdc-05ba-75e2-b416-ed3ac14f7620",
+        "tool_input": {
+          "patient_context": "{\"id\":\"2191\",\"name\":\"Ana Costa\",\"gender\":\"female\",\"birthDate\":\"1998-07-22\",\"conditions\":[{\"id\":\"2192\",\"status\":\"resolved\",\"display\":\"Amigdalite aguda\"}],\"medications\":[],\"observations\":[{\"id\":\"2193\",\"display\":\"IMC\",\"loinc\":\"39156-5\",\"value\":22,\"unit\":\"kg/m2\",\"date\":\"2024-03-15T10:00:00-03:00\"},{\"id\":\"2194\",\"display\":\"Pressao arterial\",\"loinc\":\"85354-9\",\"value\":null,\"unit\":\"\",\"date\":\"2024-03-15T10:00:00-03:00\",\"components\":[\"Systolic blood pressure: 110 mmHg\",\"Diastolic blood pressure: 70 mmHg\"]}],\"allergies\":[],\"encounters\":[{\"id\":\"2195\",\"status\":\"finished\",\"type\":[\"Check-up anual\"],\"start\":\"2024-03-15T10:00:00-03:00\",\"end\":\"2024-03-15T10:30:00-03:00\"}]}",
+          "covered_topics": [
+            "red_flag_symptoms"
+          ],
+          "patient_initial_message": "Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever"
+        }
+      },
+      {
+        "type": "tool_end",
+        "tool_name": "get_next_triage_question",
+        "run_id": "019e9fdc-05ba-75e2-b416-ed3ac14f7620",
+        "output": "{\"question\": \"Have you noticed any difficulty breathing or swallowing since your sore throat started?\", \"topic\": \"red_flag_symptoms\", \"remaining_topics\": [], \"total_remaining\": 0}",
+        "elapsed": 1.2
+      },
+      {
+        "type": "llm_start",
+        "llm_num": 4,
+        "run_id": "019e9fdc-0a74-7561-9891-d20524089cac"
+      }
+    ]
+  }
+}

@@ -154,8 +154,8 @@ Text-based interaction in the terminal. Type `exit` to quit.
 
 ```
 python/triage/
-.env                        # Configuration (FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*) — NOT tracked in git
-.env.example                # Template without credentials
+.env # Configuration (FHIR_BASE_URL, OPENAI_API_KEY, LANGSMITH_*, LOG_LEVEL, LLM_CACHE) — NOT tracked in git
+.env.example # Template without credentials
 requirements.txt            # Python dependencies
 Dockerfile                  # Python 3.12-slim image for the triage service
 entrypoint.sh               # Container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
@@ -165,10 +165,11 @@ seed_data/                  # FHIR JSON bundles for loading
     patient_joao_santos.json
     patient_ana_costa.json
     patient_roberto_lima.json
-fhir_server.py              # MCP Server 1 — FHIR CRUD (port 8000)
-triage_server.py            # MCP Server 2 — contextual triage (port 8001)
+fhir_server.py # MCP Server 1 — FHIR CRUD (port 8000)
+triage_server.py # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
-agent.py                    # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
+logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file handlers)
+agent.py # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
 app.py # Gradio chat UI with trace panel — Web
 voice_bridge.py # Voice Bridge — OpenAI-compatible API for ElevenLabs (port 8003) *(roadmap)*
@@ -221,6 +222,34 @@ README.md                   # This file
 
 ## Observability
 
+### Structured Logging
+
+All modules use `logging_config.py` for centralized logging with the `LOG_LEVEL` env var (default: `DEBUG`). Logs go to both stderr (visible via `docker compose logs`) and per-module files in `/tmp/`.
+
+| Log level | What you see |
+|---|---|
+| `DEBUG` | Full FHIR request/response payloads, LLM prompts/responses, MCP URLs, tool names, cache HIT/MISS |
+| `INFO` | Tool calls, agent creation, cache status, resource creation, errors |
+
+**View logs:**
+
+```bash
+# Live stderr (all modules mixed)
+docker compose logs triage -f
+
+# Live stderr — DEBUG lines only
+docker compose logs triage -f | grep DEBUG
+
+# Per-module log files (inside container)
+docker compose exec triage tail -f /tmp/fhir_server.log
+docker compose exec triage tail -f /tmp/triage_server.log
+docker compose exec triage tail -f /tmp/cr_server.log
+docker compose exec triage tail -f /tmp/voice_bridge.log
+docker compose exec triage tail -f /tmp/app.log
+```
+
+**Change log level:** Set `LOG_LEVEL` in `.env` (e.g., `LOG_LEVEL=INFO` for quieter output, `LOG_LEVEL=DEBUG` for full detail).
+
 ### Gradio Trace Panel
 
 The Gradio UI includes a **trace panel** that shows agent step progress in real-time. Each tool call is mapped to one of the 5 workflow steps with visual indicators.
@@ -232,6 +261,35 @@ To enable [LangSmith](https://smith.langchain.com/) tracing for detailed agent i
 1. Add `LANGSMITH_API_KEY` to `.env`
 2. Set `LANGSMITH_TRACING=true` (enabled by default when the key is present)
 3. Set `LANGSMITH_PROJECT=triage-aide` (or your preferred project name)
+
+## LLM Cache
+
+The agent supports optional caching of LLM responses and tool results to reduce API costs and latency during development. Controlled by the `LLM_CACHE` env var in `.env`:
+
+| Value | Behavior |
+|---|---|
+| `off` | No caching (default) |
+| `memory` | In-memory cache (resets on restart) |
+| `sqlite` | SQLite-backed persistent cache (survives restarts) |
+
+```bash
+# Enable persistent SQLite cache (recommended for development)
+LLM_CACHE=sqlite
+
+# Enable in-memory cache (lost on restart)
+LLM_CACHE=memory
+
+# Disable caching
+LLM_CACHE=off
+```
+
+When `LLM_CACHE=sqlite`, two caches are active:
+- **LLM cache** — stores LLM completions keyed by normalized prompt + tool history (same patient input + same tool flow = cache hit)
+- **Tool cache** — stores MCP tool results keyed by tool name + arguments
+
+Cache files are stored at `~/.cache/langchain_cache.db` and `~/.cache/tool_cache.db` by default. Customize paths with `LLM_CACHE_DB_PATH` and `TOOL_CACHE_DB_PATH`. Each cache namespace (e.g., `gradio`, `voice`) gets its own SQLite file.
+
+Cache hit/miss events are logged at `DEBUG` level (set `LOG_LEVEL=DEBUG` to see them).
 
 ## Voice Integration (ElevenLabs) *(Roadmap — next step)*
 
@@ -372,6 +430,8 @@ For live logging with structured output:
 docker compose exec triage bash -c 'tail -f /tmp/voice_bridge.log'
 ```
 
+If logs lack detail, verify `LOG_LEVEL=DEBUG` in `.env` and restart the triage container.
+
 ### Restart MCP servers manually
 
 ```bash
@@ -426,6 +486,6 @@ docker compose exec triage bash -c 'echo $VOICE_BRIDGE_SECRET | wc -c'
 - **MCP**: FastMCP with streamable-http transport
 - **Agent**: LangChain + langchain-mcp-adapters + OpenAI gpt-4o-mini
 - **UI**: Gradio ChatInterface with trace panel
-- **Observability**: LangSmith tracing (optional)
+- **Observability**: LangSmith tracing (optional) + structured logging (LOG_LEVEL)
 - **Language**: Python 3
 - **Deploy**: Docker Compose (2 services: iris + triage)
