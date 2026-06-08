@@ -108,17 +108,22 @@ A Gradio web UI provides the patient-facing chat interface alongside a real-time
 
 The FHIRServer MCP is where InterSystems IRIS for Health meets the new age of Agentic AI. It exposes 12 tools — 7 for querying the FHIR record, 5 for writing back — giving any AI agent full bidirectional access to the patient's clinical data through standard FHIR R4 REST API calls:
 
-| Query Tools (Read) | Create Tools (Write) |
-|---|---|
-| `search_patients` — find patient by name | `create_flag_and_task` — clinical alert + follow-up task |
-| `get_patient` — demographics by ID | `create_questionnaire_response` — structured triage Q&A |
-| `get_patient_conditions` — active/resolved conditions | `create_encounter` — pre-consultation encounter |
-| `get_patient_medications` — medication requests | `create_observation` — new clinical observation |
-| `get_patient_observations` — labs and vitals | `create_condition` — new condition |
-| `get_patient_allergies` — allergies and intolerances | |
-| `get_patient_encounters` — visit history | |
+| MCP Tool | FHIR Interaction | REST Endpoint | Key Parameters |
+|---|---|---|---|
+| `search_patients` | search-type | `GET /Patient` | `name`, `family`, `given`, `_count` |
+| `get_patient` | read | `GET /Patient/{id}` | — |
+| `get_patient_conditions` | search-type | `GET /Condition` | `patient`, `_count` |
+| `get_patient_medications` | search-type | `GET /MedicationRequest` | `patient`, `_count` |
+| `get_patient_observations` | search-type | `GET /Observation` | `patient`, `_sort=-date`, `_count`, `code` |
+| `get_patient_allergies` | search-type | `GET /AllergyIntolerance` | `patient`, `_count` |
+| `get_patient_encounters` | search-type | `GET /Encounter` | `patient`, `_sort=-date`, `_count` |
+| `create_flag_and_task` | create (×2) | `POST /Flag` + `POST /Task` | — |
+| `create_questionnaire_response` | create | `POST /QuestionnaireResponse` | — |
+| `create_encounter` | create | `POST /Encounter` | — |
+| `create_observation` | create | `POST /Observation` | — |
+| `create_condition` | create | `POST /Condition` | — |
 
-This read-then-write pattern is what makes FHIR a **living clinical memory** for AI agents. The agent reads conditions, medications, and labs to build context; reasons over them with LLM-powered triage tools; then writes Flag, Task, Observation, QuestionnaireResponse, and Encounter resources back to the same canonical record. No ETL, no sync — the AI reads from and writes to the same InterSystems IRIS FHIR Server, and every resource it creates is immediately available to any FHIR-compliant system.
+The `JsonAdvSql` interactions strategy enables the search parameters the query tools depend on — `patient` compartment search, `_sort=-date` for recent-first ordering, `code` for LOINC filtering — which the simpler `Json` strategy does not support. On the write side, every create tool uses the FHIR `create` interaction (`POST /{ResourceType}` with `Content-Type: application/fhir+json`). The InterSystems IRIS FHIR Server returns HTTP 201 with an empty body; the server-assigned resource ID is extracted from the `Location` response header (format: `…/ResourceType/{id}/_history/1`), which the agent then references in subsequent operations. This read-then-write pattern is what makes FHIR a **living clinical memory** for AI agents — the agent reads conditions, medications, and labs to build context; reasons over them with LLM-powered triage tools; then writes Flag, Task, Observation, QuestionnaireResponse, and Encounter resources back to the same canonical record. No ETL, no sync — the AI reads from and writes to the same InterSystems IRIS FHIR Server, and every resource it creates is immediately available to any FHIR-compliant system.
 
 ## Walkthrough: João Santos, 72 Years Old
 
