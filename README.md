@@ -42,7 +42,6 @@ OPENAI_API_KEY=sk-...your-key-here...
 ### 3 — Build and start
 
 ```bash
-docker compose build --no-cache --progress=plain
 docker compose up -d
 ```
 
@@ -255,9 +254,8 @@ docker compose logs -f triage
 
 Look for these lines indicating all services are up:
 ```
- Port 8000 ready
- Port 8001 ready
- Port 8001 ready
+Port 8000 ready
+Port 8001 ready
 Port 8002 ready
 Starting Voice Bridge on port 8003... *(roadmap)*
 Starting Gradio UI on port 7860...
@@ -340,7 +338,7 @@ docker compose exec triage bash -c "cd /app && python3 cli.py"
 |---|---|---|---|
 | **Maria Silva** | 58, F | DM2 + Hypertension + HbA1c 8.2% | Uncontrolled diabetes, elevated cardiovascular risk |
 | **Joao Santos** | 72, M | HF + AFib + DM2 + HTN + CKD stage 3 | Polypharmacy, drug interactions, high risk |
-| **Ana Costa** | 28, F | No active conditions | Generic questions, no red flags, routine priority |
+| **Ana Costa** | 28, F | Acute tonsillitis (mild) | No red flags, routine priority |
 | **Roberto Lima** | 65, M | COPD + HTN + Osteoarthritis + Depression + SpO2 93% | Respiratory red flags, severe allergy (anaphylaxis), urgent priority |
 
 ### Managing Test Data
