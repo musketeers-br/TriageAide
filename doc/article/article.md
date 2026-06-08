@@ -36,7 +36,53 @@ TriageAide separates concerns into three MCP (Model Context Protocol) servers, e
 | **TriageServer** | :8001 | 5 | Contextual question generation, symptom extraction, red flag detection |
 | **ClinicalReasoningServer** | :8002 | 1 | Comprehensive clinical assessment (risk + priority + summary + follow-up) |
 
-A **LangChain agent** orchestrates these servers through 18 tools, following a five-step mandatory workflow: **FHIR Query → Contextual Triage → Red Flags Check → Clinical Reasoning → FHIR Update.**
+A **LangChain agent** orchestrates these servers through 18 tools, following a five-step mandatory workflow: **FHIR Query → Contextual Triage → Red Flags Check → Clinical Reasoning → FHIR Update.** Under the hood, `langchain.agents.create_agent` builds a compiled LangGraph state graph with two nodes — `model` (LLM reasoning) and `tools` (all 18 MCP tools in a single ToolNode) — connected in a ReAct loop:
+
+```mermaid
+graph TD
+    START([__start__]):::first --> MODEL
+    MODEL[model<br/>LLM reasoning] -.->|respond to patient| END([__end__]):::last
+    MODEL -.->|invoke tool| TOOLS
+    TOOLS[tools<br/>18 MCP tools] --> MODEL
+    classDef first fill:#4CAF50,stroke:#2E7D32,color:white
+    classDef last fill:#F44336,stroke:#C62828,color:white
+```
+
+The `model` node decides at each step: respond to the patient, or invoke a tool. When it chooses a tool, the `tools` node executes it and feeds the result back to `model`, which reasons again. This loop continues until the model produces a final response — the ReAct (Reason + Act) pattern that powers every step of the triage workflow.
+
+The clinical workflow maps five domain steps onto this ReAct loop:
+
+```mermaid
+graph LR
+    S1["① FHIR Query"] -->|patient_context| S2
+    S2["② Contextual Triage"] -->|symptoms| S3
+    S3["③ Red Flags Check"] -->|alerts| S4
+    S4["④ Clinical Reasoning"] -->|assessment| S5
+    S5["⑤ FHIR Update"]
+
+    S1 -.- FHIR_R["FHIRServer<br/>7 query tools"]
+    S2 -.- TRIAGE_Q["TriageServer<br/>get_next_triage_question<br/>analyze_patient_response"]
+    S3 -.- TRIAGE_RF["TriageServer<br/>check_red_flags"]
+    S4 -.- CR["ClinicalReasoningServer<br/>clinical_assessment"]
+    S5 -.- FHIR_W["FHIRServer<br/>5 create tools"]
+
+    PATIENT(("👤 Patient")) <-->|questions & answers| S2
+    PATIENT <-->|red flag warnings| S3
+
+    classDef fhir fill:#1565C0,stroke:#0D47A1,color:white
+    classDef triage fill:#2E7D32,stroke:#1B5E20,color:white
+    classDef cr fill:#E65100,stroke:#BF360C,color:white
+    classDef step fill:#F5F5F5,stroke:#616161
+    classDef patient fill:#EC407A,stroke:#AD1457,color:white
+
+    class S1,S5 step
+    class S2,S3 step
+    class S4 step
+    class FHIR_R,FHIR_W fhir
+    class TRIAGE_Q,TRIAGE_RF triage
+    class CR cr
+    class PATIENT patient
+```
 
 **InterSystems IRIS for Health** is the foundation — a transactional, SQL-accessible FHIR R4 repository using the `JsonAdvSql` interactions strategy. The agent queries via standard FHIR REST API (`GET /Condition?patient=2196`) and writes back clinical alerts (`POST /Flag`, `POST /Task`) to the same canonical record. No ETL, no sync — the AI reads from and writes to the same server, transforming FHIR from a data archive into a living clinical memory.
 
@@ -58,12 +104,21 @@ A Gradio web UI provides the patient-facing chat interface alongside a real-time
 
 ![TriageAide Gradio UI — chat on the left, agent trace on the right](screenshot_blank_ui.png)
 
----
+### FHIRServer: The Agentic AI Foundation
 
-todo: create a section and detail this MCP: | **FHIRServer** | :8000 | 12 | CRUD operations against IRIS FHIR R4 |
-as the cern of the contest is using InterSystems FHIR support to adapt to the new age of Agentic AI
+The FHIRServer MCP is where InterSystems IRIS for Health meets the new age of Agentic AI. It exposes 12 tools — 7 for querying the FHIR record, 5 for writing back — giving any AI agent full bidirectional access to the patient's clinical data through standard FHIR R4 REST API calls:
 
----
+| Query Tools (Read) | Create Tools (Write) |
+|---|---|
+| `search_patients` — find patient by name | `create_flag_and_task` — clinical alert + follow-up task |
+| `get_patient` — demographics by ID | `create_questionnaire_response` — structured triage Q&A |
+| `get_patient_conditions` — active/resolved conditions | `create_encounter` — pre-consultation encounter |
+| `get_patient_medications` — medication requests | `create_observation` — new clinical observation |
+| `get_patient_observations` — labs and vitals | `create_condition` — new condition |
+| `get_patient_allergies` — allergies and intolerances | |
+| `get_patient_encounters` — visit history | |
+
+This read-then-write pattern is what makes FHIR a **living clinical memory** for AI agents. The agent reads conditions, medications, and labs to build context; reasons over them with LLM-powered triage tools; then writes Flag, Task, Observation, QuestionnaireResponse, and Encounter resources back to the same canonical record. No ETL, no sync — the AI reads from and writes to the same InterSystems IRIS FHIR Server, and every resource it creates is immediately available to any FHIR-compliant system.
 
 ## Walkthrough: João Santos, 72 Years Old
 
