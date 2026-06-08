@@ -392,20 +392,33 @@ async def create_condition(
 async def create_questionnaire_response(
     patient_id: str, questions_responses: str,
 ) -> str:
-    """Saves the structured triage as QuestionnaireResponse on the FHIR Server. questions_responses = JSON string with list of {question, answer}."""
+    """Saves the structured triage as QuestionnaireResponse on the FHIR Server. questions_responses = JSON string with list of {question, answer} or JSON from build_questionnaire_response_data (which wraps items in {patient_id, items, total})."""
     logger.info("create_questionnaire_response | patient_id=%s", patient_id)
     try:
-        qr_list = json.loads(questions_responses)
+        parsed = json.loads(questions_responses)
     except json.JSONDecodeError:
         return json.dumps({"error": "questions_responses must be valid JSON with list of {question, answer}"})
 
+    if isinstance(parsed, dict) and "items" in parsed:
+        qr_list = parsed["items"]
+    elif isinstance(parsed, list):
+        qr_list = parsed
+    else:
+        return json.dumps({"error": "questions_responses must be a list of {question, answer} or {items: [...]} object"})
+
     items = []
     for i, qr in enumerate(qr_list):
+        if isinstance(qr, dict):
+            q_text = qr.get("question", "")
+            a_text = str(qr.get("answer", ""))
+        else:
+            q_text = str(qr)
+            a_text = ""
         items.append(
             {
                 "linkId": f"q{i+1}",
-                "text": qr.get("question", ""),
-                "answer": [{"valueString": str(qr.get("answer", ""))}],
+                "text": q_text,
+                "answer": [{"valueString": a_text}],
             }
         )
 
