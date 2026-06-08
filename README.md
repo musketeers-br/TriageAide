@@ -12,7 +12,61 @@ This is **not** a generic chatbot that generates FHIR from scratch. It is an int
 2. **Contextual Triage** — asks intelligent questions based on real clinical history, not generic checklists
 3. **Bidirectional** — reads from AND writes back to the FHIR server
 4. **Longitudinal** — understands care continuity (e.g., "last visit 8 months ago — follow-up overdue")
-5. **Bilingual** — supports Brazilian Portuguese (pt-BR) and English (en-US) in chat
+5. **Multilingual** — the agent naturally responds in the language the patient uses
+
+---
+
+## Quick Start
+
+Get TriageAide running in a few steps. **Only Docker and an OpenAI API key are required.**
+
+### 1 — Clone
+
+```bash
+git clone https://github.com/jrpereirajr/TriageAide.git
+cd TriageAide
+```
+
+### 2 — Set your OpenAI API key
+
+```bash
+cp python/triage/.env.example python/triage/.env
+```
+
+Edit `python/triage/.env` and add your key:
+
+```
+OPENAI_API_KEY=sk-...your-key-here...
+```
+
+### 3 — Build and start
+
+```bash
+docker compose build --no-cache --progress=plain
+docker compose up -d
+```
+
+The build takes some minutes on first run (IRIS image). The triage container waits up to 120 seconds for IRIS to initialize, then loads 4 test patients and starts all services automatically.
+
+### 4 — Test it
+
+Open **http://localhost:7860** in your browser and type:
+
+> **Hi, I'm Joao Santos, I've been having trouble breathing at night and my legs are swollen**
+
+The agent queries Joao's FHIR record (5 conditions, 4 medications, elevated creatinine), detects a critical warfarin-bleeding interaction, and writes findings back to the FHIR server — all visible in real time on the trace panel.
+
+**Other test patients to try:**
+
+| Patient | Message | What you'll see |
+|---|---|---|
+| **Ana Costa** | *"Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever"* | Healthy patient, 0 red flags, routine priority |
+| **Maria Silva** | *"Start triage for patient Maria Silva"* | Uncontrolled diabetes, elevated cardiovascular risk |
+| **Roberto Lima** | *"Triage for patient Roberto Lima"* | COPD, respiratory red flags, severe allergy, urgent priority |
+
+> For optional configuration (LangSmith tracing, Voice UI, log levels), see [Setup — Step by Step](#setup--step-by-step).
+
+Note: the app uses a LLM cache by default, so you will notice a dramatic speed up when repeat a prompt. Futhermore, the project loads a cache with interactions for the first two tests - for patients Joao and Ana Costa, so you will see a fast response due the cache hit.
 
 ---
 
@@ -35,9 +89,9 @@ FHIR Server (InterSystems IRIS for Health)      ← iris container
 +-- triage_server.py (MCP :8001) — 6 contextual triage tools
 +-- clinical_reasoning_server.py (MCP :8002) — 4 clinical reasoning tools
 |
-+-- agent.py (LangChain + OpenAI gpt-4o-mini) — core agent, bilingual system prompt
++-- agent.py (LangChain + OpenAI gpt-4o-mini) — core agent
 +-- voice_bridge.py (FastAPI :8003) — OpenAI-compatible endpoint for ElevenLabs *(roadmap)*
-+-- voice_session.py — per-session state and language detection *(roadmap)*
++-- voice_session.py — per-session state *(roadmap)*
 +-- cli.py — interactive CLI interface
 +-- app.py (Gradio :7860) — web UI: Chat tab (+ Voice tab when ENABLE_VOICE_UI=true)
 |
@@ -52,19 +106,18 @@ Voice interaction via ElevenLabs Conversational AI is implemented in the backend
         | WebSocket (ElevenLabs Conversational AI)
         v
 [ElevenLabs Cloud]
-  - STT: speech-to-text (pt-BR / en-US, auto-detect)
-  - TTS: voice synthesis (Brazilian Portuguese voice)
-        |
-        | POST /v1/chat/completions  (OpenAI-compatible, Bearer auth)
-        v
+- STT: speech-to-text (auto-detect)
+- TTS: voice synthesis
+|
+| POST /v1/chat/completions (OpenAI-compatible, Bearer auth)
+v
 [voice_bridge.py — FastAPI :8003]
-  - Session management per conversation
-  - Language detection (heuristic + ElevenLabs header)
-  - Markdown stripping for clean TTS output
-  - SSE streaming
-        |
-        v
-[agent.py — LangChain + gpt-4o-mini]  (bilingual: auto-detect mode)
+- Session management per conversation
+- Markdown stripping for clean TTS output
+- SSE streaming
+|
+v
+[agent.py — LangChain + gpt-4o-mini]
         |
    ┌────┴───────────────┬─────────────────────┐
    v                    v                     v
@@ -221,7 +274,6 @@ Running on local URL: http://0.0.0.0:7860
 2. Click the **💬 Chat** tab (active by default)
 3. Type one of the example prompts or click an example chip:
 
-**English:**
 ```
 Start triage for patient Maria Silva
 Triage for patient Joao Santos
@@ -229,13 +281,7 @@ Patient Ana Costa history
 Triage for patient Roberto Lima
 ```
 
-**Português:**
-```
-Iniciar triagem para Maria Silva
-Triagem para paciente João Santos
-Histórico do paciente Ana Costa
-Triagem para Roberto Lima
-```
+The agent responds in the language you use — type in Portuguese, it answers in Portuguese; type in English, it answers in English.
 
 4. Watch the **Agent Trace** panel on the right — it shows each of the 5 workflow steps in real time as the agent queries FHIR, asks questions, reasons, and writes back to IRIS.
 
@@ -426,12 +472,7 @@ Restart: `docker compose restart triage`
 - Start with *"Hi, triage for Roberto Lima"* → agent responds in English
 - Start with *"Olá, triagem para João Santos"* → agent responds in Portuguese
 
-### Bilingual Support
-
-The agent automatically detects language from the patient's speech:
-- **Portuguese detected** → all responses in pt-BR
-- **English detected** → all responses in en-US
-- Language is **sticky per session**
+**Language:** The agent naturally responds in the language the patient uses — no configuration needed.
 
 ### ElevenLabs Agent Configuration Reference
 
@@ -514,7 +555,7 @@ TriageAide/
 │
 ├── agent.py # Core agent: get_system_prompt(), create_triage_agent()
 ├── voice_bridge.py # FastAPI Voice Bridge (port 8003) *(roadmap)*
-├── voice_session.py # Per-session state, language detection, TTL eviction *(roadmap)*
+├── voice_session.py # Per-session state, TTL eviction *(roadmap)*
     │
     ├── fhir_server.py              # MCP Server 1 — FHIR CRUD (port 8000)
     ├── triage_server.py            # MCP Server 2 — Contextual triage (port 8001)
@@ -758,10 +799,6 @@ The `.env` file must be the **only** source of `VOICE_BRIDGE_SECRET`. Do not dup
 - If using `start_tunnel.sh`, verify the fixed URL: `curl https://dark-ways-itch.loca.lt/health`
 - The ngrok URL changes every restart (free plan). Update `VOICE_BRIDGE_URL` in `.env` and in the ElevenLabs agent configuration.
 - For persistent URLs, use [ngrok's static domains](https://ngrok.com/blog-post/free-static-domains-ngrok-users) (free tier: 1 static domain).
-
-### Agent responds in the wrong language *(Roadmap — voice only)*
-
-Language detection is heuristic-based. If the agent responds in the wrong language, check `voice_bridge.log` for the detected language. You can override by adding an explicit instruction in your first message: *"Please respond in English"* or *"Por favor, responda em português"*.
 
 ### Dependency changes are lost on container restart
 

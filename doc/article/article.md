@@ -1,4 +1,4 @@
-# FHIR-First AI Triage: How InterSystems IRIS, MCP, and Generative AI Transform Pre-Consultation Care
+# Using InterSystems IRIS FHIR Server, MCP, and Generative AI to Assist Pre-Consultation Care
 
 *An AI agent reads the FHIR patient record before the consultation, asks the right questions based on what it already knows, detects critical red flags, and writes its findings back — so the physician arrives prepared.*
 
@@ -6,23 +6,27 @@
 
 ---
 
-## The Problem Nobody Sees
+## Healthcare Pain Points Addressed
 
-Before a patient walks into a consultation room, a critical failure has already occurred: **nobody read their medical history.** The physician has 15 minutes. The patient repeats their conditions, medications, and allergies for the third time that year. Red flags—bleeding on warfarin, chest pain with heart failure, suicidal ideation with depression—go unasked until it's too late, or not at all.
+Before a patient walks into a consultation room, a critical failure has already occurred: **nobody read their medical history.** The physician has 15 minutes. The patient repeats their conditions, medications, and allergies for the third time that year. Red flags — like bleeding on warfarin, chest pain with heart failure, suicidal ideation with depression etc — go unasked until it's too late, or not at all.
 
-This isn't a technology gap. The data exists. It lives in FHIR repositories like InterSystems IRIS for Health, holding longitudinal patient records with conditions, medications, lab results, allergies, and encounter history. The gap is **intelligence at the point of care**—an agent that reads the record *before* the visit, asks the right questions based on what it already knows, and writes its findings back so the physician arrives prepared.
+This isn't a technology gap. The data exists. It lives in repositories spread across different systems, holding longitudinal patient records with conditions, medications, lab results, allergies, and encounter history. The gap is **intelligence at the point of care** — an agent that reads the record *before* the visit, asks the right questions based on what it already knows, and writes its findings back so the physician arrives prepared.
 
-That's what TriageAide does.
+**TriageAide** bridges this gap. The **Conversational FHIR Triage Assistant** is an AI agent designed to streamline patient intake and clinical handoffs. Built on the InterSystems IRIS FHIR Server, Model Context Protocol (MCP), and Generative AI, it delivers:
 
-This project implements the **Conversational FHIR Triage Assistant** (suggested task #10 from the [AI Agents for FHIR contest](https://openexchange.intersystems.com/contest/46)) — an AI agent that asks patients structured triage questions, stores answers as `QuestionnaireResponse`, and creates a clinician handoff summary with coded observations, flags, and follow-up tasks.
+* **Context-Aware Triage:** Conducts structured patient interviews driven by existing health history (leveraging `Encounter`, `Condition`, and `Observation` FHIR resources).
+* **Seamless Storage:** Saves patient responses directly as `QuestionnaireResponse` resources within the InterSystems IRIS FHIR Server.
+* **Clinical Handoff:** Generates a structured summary for clinicians featuring coded observations, priority flags, and actionable follow-up tasks.
 
 ## FHIR as Living Clinical Memory
 
-InterSystems IRIS for Health serves as the FHIR R4 server at the heart of TriageAide. Every patient's clinical history—`Condition`, `MedicationRequest`, `Observation`, `AllergyIntolerance`, `Encounter`—lives there as standard FHIR resources. This isn't a data lake the agent parses and forgets. It's the **longitudinal record**, and the agent's job is to reason over it, then enrich it.
+If you are using InterSystems IRIS for Health, you are already one step ahead in solving this technology gap, thanks to its native support for the FHIR (Fast Healthcare Interoperability Resources) standard. This enables you to seamlessly normalize healthcare data from disparate sources into a centralized repository, leveraging a robust data model and a powerful query engine.
 
-What makes this different from a chatbot that generates FHIR resources from scratch? The agent **reads first**. It pulls five chronic conditions, four active medications, an elevated creatinine, a low ejection fraction—then *uses that context* to drive intelligent triage. The FHIR server doesn't just store data. It becomes the context engine for clinical AI.
+InterSystems IRIS for Health serves as the FHIR R4 server at the heart of TriageAide. Every patient's clinical history — `Condition`, `MedicationRequest`, `Observation`, `AllergyIntolerance`, `Encounter` — lives there as standard FHIR resources. This isn't a data lake the agent parses and forgets. It's the **longitudinal record**, and the agent's job is to reason over it, then enrich it.
 
-## Architecture: Three MCP Servers, One Agent
+What makes this different from a chatbot that generates FHIR resources from scratch? The agent **reads first**. It pulls chronic conditions, active medications etc — then *uses that context* to drive intelligent triage. The FHIR server doesn't just store data. It becomes the context engine for clinical AI.
+
+## Architecture
 
 TriageAide separates concerns into three MCP (Model Context Protocol) servers, each running as an independent FastMCP service over streamable-http:
 
@@ -32,9 +36,23 @@ TriageAide separates concerns into three MCP (Model Context Protocol) servers, e
 | **TriageServer** | :8001 | 5 | Contextual question generation, symptom extraction, red flag detection |
 | **ClinicalReasoningServer** | :8002 | 1 | Comprehensive clinical assessment (risk + priority + summary + follow-up) |
 
-A LangChain agent (powered by OpenAI gpt-4o-mini) orchestrates these servers through 18 tools, following a five-step mandatory workflow: **FHIR Query → Contextual Triage → Red Flags Check → Clinical Reasoning → FHIR Update.**
+A **LangChain agent** orchestrates these servers through 18 tools, following a five-step mandatory workflow: **FHIR Query → Contextual Triage → Red Flags Check → Clinical Reasoning → FHIR Update.**
 
-The MCP architecture matters. Each server is independently deployable, testable, and replaceable. The FHIR server can serve any agent, not just this triage agent. The clinical reasoning server could power a different workflow—risk stratification, care gap detection—without touching the FHIR layer. **MCP decouples tool access from agent logic.**
+**InterSystems IRIS for Health** is the foundation — a transactional, SQL-accessible FHIR R4 repository using the `JsonAdvSql` interactions strategy. The agent queries via standard FHIR REST API (`GET /Condition?patient=2196`) and writes back clinical alerts (`POST /Flag`, `POST /Task`) to the same canonical record. No ETL, no sync — the AI reads from and writes to the same server, transforming FHIR from a data archive into a living clinical memory.
+
+**MCP** decouples tool provision from consumption. Each server is independently deployable and replaceable — the FHIR server can serve any future agent (risk stratification, medication reconciliation, care gap detection) without re-implementing FHIR CRUD. The LangChain agent discovers all 18 tools at startup via `MultiServerMCPClient`. **MCP makes healthcare AI composable.**
+
+**Generative AI** provides contextual reasoning over the full clinical picture — conditions, medications, labs, allergies. Unlike rules engines, the LLM handles synonym mapping ("bruising easily" → "easy bruising"), negation ("no chest pain" ≠ "chest pain"), and cross-reference logic (warfarin + bleeding = critical) that would require hundreds of hand-coded rules. The same `check_red_flags` tool returns critical alerts for Joao Santos on warfarin, and zero alerts for Ana Costa with no active medications.
+
+**Python** glues the stack together: FastMCP for MCP servers, LangChain for agent orchestration, Gradio for the UI with trace panel, `requests` for FHIR API calls, OpenAI for LLM inference. Docker Compose packages IRIS and the triage app as two independent services, deployable with a single `docker compose up -d`.
+
+**LangSmith** provides developer observability — persistent, searchable traces across sessions with token counts, latencies, and cost tracking. When `LANGSMITH_TRACING=true` is set, every LLM call and tool invocation is automatically captured. Optional, but essential for production audit trails.
+
+![LangSmith trace — Joao Santos triage showing tool calls and LLM reasoning](screenshot_langsmith_Joao_trace.png)
+
+![LangSmith project dashboard — run history and cost tracking](screenshot_langsmith_dashboard.png)
+
+The MCP architecture matters. Each server is independently deployable, testable, and replaceable. The FHIR server can serve any agent, not just this triage agent. The clinical reasoning server could power a different workflow — risk stratification, care gap detection—without touching the FHIR layer. **MCP decouples tool access from agent logic.**
 
 A Gradio web UI provides the patient-facing chat interface alongside a real-time **trace panel** that reveals every step the agent takes—every LLM reasoning call, every tool invocation with arguments and results, mapped to the workflow steps. This is what we'll walk through.
 
@@ -42,7 +60,14 @@ A Gradio web UI provides the patient-facing chat interface alongside a real-time
 
 ---
 
-## Walkthrough: Joao Santos, 72 Years Old
+todo: create a section and detail this MCP: | **FHIRServer** | :8000 | 12 | CRUD operations against IRIS FHIR R4 |
+as the cern of the contest is using InterSystems FHIR support to adapt to the new age of Agentic AI
+
+---
+
+## Walkthrough: João Santos, 72 Years Old
+
+*Reproducibility note: All walkthrough traces below use LLM cache (`LLM_CACHE=sqlite`). Pre-populated cache files ship at `python/triage/cache/`, so running the same inputs produces identical results — zero API cost, zero variance.*
 
 Joao Santos is a test patient with a complex cardiovascular profile:
 
@@ -56,9 +81,9 @@ Joao opens the Gradio chat and types:
 
 > **"Hi, I'm Joao Santos, I've been having trouble breathing at night and my legs are swollen"**
 
-### STEP 1 — FHIR Query
+### STEP 1 — FHIR Query (FHIRServer)
 
-The trace panel immediately lights up. The agent doesn't ask "How can I help you?"—it already knows why Joao is here. Before responding, it queries the FHIR server:
+The trace panel immediately lights up. Before responding, the agent queries the FHIR server:
 
 ```
 🧠 LLM #1 → search_patients
@@ -100,7 +125,7 @@ Result: [{"substance": "Aspirin", "criticality": "high",
 "reactions": [{"manifestation": "Asthma exacerbation", "severity": "severe"}]}]
 ```
 
-Seven FHIR calls, all against the InterSystems IRIS FHIR server, in under 2 seconds. The agent now knows Joao's full clinical picture—**before saying a single word to the patient**. This is the FHIR-First principle in action.
+Seven FHIR calls, all against the InterSystems IRIS FHIR server. The agent now knows Joao's full clinical picture — **before saying a single word to the patient**. This is the FHIR-First principle in action.
 
 ![Joao Santos — STEP 1 (FHIR Query) and STEP 2 (Triage Question) in the trace panel](screenshot_joao_step1_2.png)
 
@@ -185,7 +210,7 @@ The agent immediately warns Joao:
 
 > **"I need to inform you that the symptoms you mentioned, like gum bleeding and easy bruising, are critical. You're currently taking warfarin, which can cause serious bleeding complications. It's very important that you seek immediate medical attention for this."**
 
-![Red flag detected — warfarin + bleeding = CRITICAL, visible in the trace panel](screenshot_joao_red_flags.png)
+![Red flag detected — warfarin + bleeding = CRITICAL, visible in the trace panel](screenshot_Joao_red_flags.png)
 
 ### STEP 3 Continued — More Symptoms
 
@@ -244,7 +269,132 @@ The agent doesn't just produce a report. It writes back to the same FHIR server 
 
 The physician opening Joao's chart sees: a new `Flag` resource warning about warfarin + bleeding, a `Task` requesting urgent INR review, a `QuestionnaireResponse` with the full triage conversation, and an `Encounter` marked urgent. **FHIR becomes a living clinical memory**, enriched by AI, readable by any FHIR-compliant system.
 
-![Full triage completed — all five steps visible in the trace panel](screenshot_joao_full_triage.png)
+![Full triage completed — all five steps visible in the trace panel](screenshot_Joao_full_triage.png)
+
+### What Was Written Back — FHIR Resources
+
+Querying the FHIR server after the triage session confirms all five resource types were created for Joao Santos. You can reproduce these queries against a running instance:
+
+**Flag — Warfarin + Bleeding Alert (critical)**
+
+```bash
+curl -s -u '_SYSTEM:SYS' -H 'Accept: application/fhir+json' \
+  'http://localhost:32783/fhir/r4/Flag?patient=2196'
+```
+
+```json
+{
+  "resourceType": "Flag",
+  "id": "2242",
+  "status": "active",
+  "code": {
+    "coding": [{
+      "system": "http://terminology.hl7.org/CodeSystem/flag-category",
+      "code": "clinical",
+      "display": "Clinical"
+    }],
+    "text": "CRITICAL: Bleeding symptoms in patient on Warfarin 5mg — gum bleeding and easy bruising indicate potential anticoagulation complication requiring immediate attention"
+  },
+  "subject": { "reference": "Patient/2196", "display": "Joao Santos" }
+}
+```
+
+**Task — Urgent INR Review**
+
+```bash
+curl -s -u '_SYSTEM:SYS' -H 'Accept: application/fhir+json' \
+  'http://localhost:32783/fhir/r4/Task?patient=2196'
+```
+
+```json
+{
+  "resourceType": "Task",
+  "id": "2243",
+  "status": "requested",
+  "intent": "order",
+  "priority": "urgent",
+  "description": "Check INR urgently — patient on warfarin reporting gum bleeding and easy bruising, indicating potential anticoagulation complication",
+  "for": { "reference": "Patient/2196", "display": "Joao Santos" }
+}
+```
+
+**QuestionnaireResponse — Structured Triage Q&A**
+
+```bash
+curl -s -u '_SYSTEM:SYS' -H 'Accept: application/fhir+json' \
+  'http://localhost:32783/fhir/r4/QuestionnaireResponse?patient=2196'
+```
+
+```json
+{
+  "resourceType": "QuestionnaireResponse",
+  "id": "2244",
+  "status": "completed",
+  "subject": { "reference": "Patient/2196", "display": "Joao Santos" },
+  "authored": "2026-06-07T23:10:00+00:00",
+  "item": [
+    {
+      "linkId": "q1",
+      "text": "Have you noticed any chest pain or tightness along with your breathing difficulties?",
+      "answer": [{ "valueString": "The breathing gets worse when I lie down, and I have been using more pillows to sleep" }]
+    },
+    {
+      "linkId": "q2",
+      "text": "Have you noticed any unusual bleeding or bruising?",
+      "answer": [{ "valueString": "I have noticed some easy bruising and my gums bleed when I brush my teeth" }]
+    },
+    {
+      "linkId": "q3",
+      "text": "Have you been feeling dizzy or more tired than usual?",
+      "answer": [{ "valueString": "I have been feeling dizzy when I stand up quickly, and more tired than usual" }]
+    }
+  ]
+}
+```
+
+**Observation — New Symptom: Gum Bleeding**
+
+```bash
+curl -s -u '_SYSTEM:SYS' -H 'Accept: application/fhir+json' \
+  'http://localhost:32783/fhir/r4/Observation?patient=2196'
+```
+
+```json
+{
+  "resourceType": "Observation",
+  "id": "2245",
+  "status": "final",
+  "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "exam" }] }],
+  "code": {
+    "coding": [{ "system": "http://snomed.info/sct", "code": "131148009", "display": "Bleeding gum" }],
+    "text": "Gum bleeding"
+  },
+  "subject": { "reference": "Patient/2196", "display": "Joao Santos" },
+  "effectiveDateTime": "2026-06-07T23:10:00+00:00",
+  "valueString": "Patient reports gum bleeding when brushing teeth, consistent with warfarin anticoagulation complication"
+}
+```
+
+**Encounter — Pre-Consultation Triage (Emergency Priority)**
+
+```bash
+curl -s -u '_SYSTEM:SYS' -H 'Accept: application/fhir+json' \
+  'http://localhost:32783/fhir/r4/Encounter?patient=2196'
+```
+
+```json
+{
+  "resourceType": "Encounter",
+  "id": "2247",
+  "status": "planned",
+  "class": { "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "AMB", "display": "ambulatory" },
+  "priority": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v3-ActPriority", "code": "EM" }] },
+  "type": [{ "text": "AI Pre-Consultation Triage — cardiovascular symptoms with anticoagulation concern" }],
+  "subject": { "reference": "Patient/2196", "display": "Joao Santos" }
+}
+```
+
+Every resource references `Patient/2196`. The `Flag` is visible in the patient chart. The `Task` appears in the physician's task list. The `QuestionnaireResponse` preserves the full triage conversation. The `Observation` records the new symptom with a SNOMED CT code. The `Encounter` is tagged with emergency priority. All standard FHIR R4 — any compliant system can read them.
 
 ---
 
@@ -262,40 +412,6 @@ This is the power of FHIR-First reasoning: the same agent asks different questio
 
 ---
 
-## Why These Technologies Matter
-
-### InterSystems IRIS for Health — The Foundation
-
-IRIS isn't just a FHIR data store. It's a **transactional, SQL-accessible, standards-compliant FHIR repository** that supports the `JsonAdvSql` interactions strategy for performant queries. The agent queries it via standard FHIR REST API (`GET /Condition?patient=2196`), and the server returns structured, validated FHIR R4 resources. The same server accepts `POST /Flag` and `POST /Task` to write back clinical alerts. No ETL. No sync. The AI reads from and writes to the same canonical record.
-
-This bidirectionality is what transforms FHIR from a **data archive** into a **living clinical memory**—one that gets richer with every agent interaction.
-
-### MCP — Decoupled Tool Access
-
-The Model Context Protocol (MCP) separates tool *provision* from tool *consumption*. The FHIR server runs on port 8000, the triage server on 8001, the clinical reasoning server on 8002. Each is an independent FastMCP service with streamable-http transport. The LangChain agent discovers all 18 tools at startup via `MultiServerMCPClient` and calls them as needed.
-
-This matters because: any future agent—risk stratification, medication reconciliation, care gap detection—can consume the same FHIR MCP server without re-implementing FHIR CRUD. The triage logic is independent of the data layer. The clinical reasoning is independent of both. **MCP makes healthcare AI composable.**
-
-### Generative AI — Contextual Reasoning Over Data
-
-The agent isn't scripted. It doesn't follow a decision tree. When Joao Santos says "my gums bleed," the LLM-powered `check_red_flags` tool cross-references that with his warfarin prescription (retrieved from FHIR), identifies the drug-symptom interaction, and classifies it as critical. When Ana Costa says "sore throat," the same tool sees no active medications and returns 0 alerts.
-
-This is generative AI doing what rules engines can't: **reasoning over the full clinical context**—conditions, medications, labs, allergies—to produce individualized assessments. The LLM handles synonym mapping ("bruising easily" → "easy bruising"), negation ("no chest pain" ≠ "chest pain"), and cross-reference logic (warfarin + bleeding = critical) that would require hundreds of hand-coded rules.
-
-### Python — The Glue
-
-The entire triage application runs on Python: FastMCP for MCP servers, LangChain for agent orchestration, Gradio for the UI with trace panel, `requests` for FHIR API calls, OpenAI for LLM inference. Python's ecosystem—particularly `langchain-mcp-adapters` for MCP tool integration—made it possible to build a production-grade multi-MCP agent in weeks, not months. Docker Compose packages IRIS and the triage app as two independent services, deployable with a single `docker compose up -d`.
-
----
-
-## Reproducibility: Cache-Enabled Demos
-
-TriageAide runs with `LLM_CACHE=sqlite`, meaning LLM calls and tool invocations are cached in SQLite databases. Once a scenario is executed (like the Joao Santos walkthrough above), subsequent runs with identical inputs produce **identical traces**—served from cache, no API calls, no cost, no variance.
-
-The repository ships pre-populated cache files at `python/triage/cache/` containing exactly the LLM responses and tool calls from the scenarios in this article. On first boot, the container entrypoint copies these into the active cache directory. This means `docker compose up -d` followed by typing the article messages produces the **exact same trace panel flow** described here—same FHIR queries, same triage questions, same red flags, same clinical assessment. Zero API cost, zero variance.
-
----
-
 ## What the Physician Sees
 
 When the physician opens the patient record after the AI triage, they find:
@@ -310,36 +426,10 @@ The physician doesn't need to read the AI's reasoning. They need what FHIR alrea
 
 ---
 
-## Contest Technology Bonuses
+## Conclusion
 
-TriageAide qualifies for the following technology bonuses in the [AI Agents for FHIR contest](https://openexchange.intersystems.com/contest/46):
+TriageAide demonstrates that FHIR-first AI agents can transform pre-consultation care — not by replacing clinical judgment, but by ensuring the right information reaches the right person at the right time. The agent reads the patient's longitudinal FHIR record, asks contextually relevant questions, detects red flags by cross-referencing symptoms with medications and conditions, and writes structured findings back as standard FHIR resources.
 
-| Bonus | Points | How TriageAide qualifies |
-|---|---|---|
-| Implement suggested task (#10: Conversational FHIR Triage Assistant) | 5 | Structured triage questions, `QuestionnaireResponse` storage, clinician handoff summary, follow-up tasks |
-| InterSystems FHIR Server usage | 2 | IRIS for Health FHIR R4 server as the data backbone — both reads and writes |
-| LLM AI / LangChain usage | 3 | LangChain agent with OpenAI gpt-4o-mini powering all clinical reasoning tools |
-| Docker container usage | 2 | Docker Compose with IRIS + triage service, single `docker compose up -d` |
-| First Article on DC | 2 | This article |
-| Online Demo | 2 | Gradio UI with trace panel at `http://localhost:7860` |
+The architecture is composable by design. MCP separates tool access from agent logic, so the FHIR server can serve any future agent, and the clinical reasoning server can power any workflow. The bidirectional FHIR integration means the AI doesn't just consume data — it enriches the clinical record, making every subsequent interaction smarter.
 
----
-
-## Try It
-
-```bash
-git clone https://github.com/jrpereirajr/TriageAide.git
-cd TriageAide
-docker compose build --no-cache && docker compose up -d
-# Open http://localhost:7860
-# Type: "Hi, I'm Joao Santos, I've been having trouble breathing at night"
-# Watch the trace panel
-```
-
-The FHIR server (InterSystems IRIS for Health) loads 4 test patients automatically. The Gradio UI shows the chat on the left and the agent trace on the right. Every tool call, every LLM decision, every FHIR resource created—visible in real time.
-
-Check the application on [InterSystems Open Exchange](https://openexchange.intersystems.com/package/TriageAide).
-
----
-
-**Declaration of AI usage:** OpenAI gpt-4o-mini powers the triage agent's clinical reasoning tools. Claude (Anthropic) was used as a coding assistant during development. The article text was written by the author.
+The gap between available data and intelligent action at the point of care is real. With InterSystems IRIS for Health as the FHIR foundation and generative AI as the reasoning layer, that gap is closable — today.
