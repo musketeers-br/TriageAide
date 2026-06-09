@@ -53,19 +53,21 @@ Open **http://localhost:7860** in your browser and type:
 
 > **Hi, I'm Joao Santos, I've been having trouble breathing at night and my legs are swollen**
 
-The agent queries Joao's FHIR record (5 conditions, 4 medications, elevated creatinine), detects a critical warfarin-bleeding interaction, and writes findings back to the FHIR server — all visible in real time on the trace panel.
+The agent will ask you several follow-up questions to assess your symptoms before producing a final triage assessment. After the full conversation, it queries Joao's FHIR record (5 conditions, 4 medications, elevated creatinine), detects a critical warfarin-bleeding interaction, and writes findings back to the FHIR server — all visible in real time on the trace panel.
 
 **Other test patients to try:**
 
-| Patient | Message | What you'll see |
+| Patient | Opening message | Final triage result |
 |---|---|---|
 | **Ana Costa** | *"Hi, I'm Ana Costa, I've had a sore throat for a couple of days and a mild fever"* | Healthy patient, 0 red flags, routine priority |
 | **Maria Silva** | *"Start triage for patient Maria Silva"* | Uncontrolled diabetes, elevated cardiovascular risk |
 | **Roberto Lima** | *"Triage for patient Roberto Lima"* | COPD, respiratory red flags, severe allergy, urgent priority |
 
+> **Note:** The agent conducts a multi-turn conversation — it asks one question at a time and deepens its assessment before delivering the final result shown in the table. You won't see the final assessment after just one message.
+
 > For optional configuration (LangSmith tracing, Voice UI, log levels), see [Setup — Step by Step](#setup--step-by-step).
 
-Note: the app uses a LLM cache by default, so you will notice a dramatic speed up when repeat a prompt. Futhermore, the project loads a cache with interactions for the first two tests - for patients Joao and Ana Costa, so you will see a fast response due the cache hit.
+Note: the app uses a LLM cache by default, so you will notice a dramatic speed up when you repeat a prompt. Furthermore, the project loads a cache with pre-recorded full conversations for the first two tests — for patients Joao and Ana Costa — so you will see the final result immediately due to the cache hit. For Maria and Roberto, the agent will go through the full multi-turn conversation in real time.
 
 ---
 
