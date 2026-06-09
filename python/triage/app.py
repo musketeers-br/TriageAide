@@ -571,8 +571,13 @@ async def on_submit(message, chat_hist, trace_hist, mode):
 
 
 CSS = """
-#trace-panel .message-row { padding: 2px 0 !important; }
-#trace-panel .message-content { font-size: 0.85em; }
+.stretch.svelte-7xavid { flex-wrap: nowrap !important; }
+.stretch > .column > .form,
+.stretch > .column > .row { flex-grow: 0 !important; flex-shrink: 1 !important; }
+#trace-panel .message-row { padding: 4px 0 !important; }
+#trace-panel .message-content { font-size: 0.85em; overflow-x: auto; }
+#trace-panel .thought-group { margin: 4px 0 !important; }
+.message-content pre { max-width: 100%; overflow-x: auto; }
 """
 
 
@@ -606,7 +611,8 @@ def main():
                     with gr.Column(scale=3) as chat_col:
                         chatbot = gr.Chatbot(
                             label="Patient Chat",
-                            height=650,
+                            min_height=400,
+                            scale=1,
                             layout="panel",
                             placeholder="<strong>Enter a patient ID or name to begin triage</strong>",
                         )
@@ -639,7 +645,8 @@ def main():
                         trace = gr.Chatbot(
                             label="Agent Trace",
                             elem_id="trace-panel",
-                            height=650,
+                            min_height=400,
+                            scale=1,
                             layout="panel",
                             group_consecutive_messages=False,
                         )
