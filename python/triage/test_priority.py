@@ -7,6 +7,8 @@ Usage:
   python3 test_priority.py status
   python3 test_priority.py reset
   python3 test_priority.py runs
+  python3 test_priority.py auto "Ana Costa"
+  python3 test_priority.py auto-all
 
 Session state is persisted to /tmp/triage_test_session.json between calls.
 Each invocation creates a fresh agent and replays the message history.
@@ -36,10 +38,30 @@ SESSION_FILE = Path("/tmp/triage_test_session.json")
 TEST_RUNS_DIR = Path(__file__).parent / "test-runs"
 
 EXPECTED = {
-    "Ana Costa": {"priority": "routine", "risk": "low", "patient_id": "2605"},
-    "Maria Silva": {"priority": "urgent", "risk": "moderate", "patient_id": "2627"},
-    "Roberto Lima": {"priority": "urgent", "risk": "high", "patient_id": "2642"},
-    "Joao Santos": {"priority": "emergency", "risk": "critical", "patient_id": "2610"},
+    "Ana Costa": {
+        "priority": "routine",
+        "risk": "low",
+        "patient_id": "2605",
+        "opening": "Hi, I am Ana Costa, I have been having a fever and feeling tired for a couple days",
+    },
+    "Maria Silva": {
+        "priority": "urgent",
+        "risk": "moderate",
+        "patient_id": "2627",
+        "opening": "Hi, I am Maria Silva, I have been feeling really thirsty and having headaches",
+    },
+    "Roberto Lima": {
+        "priority": "urgent",
+        "risk": "high",
+        "patient_id": "2642",
+        "opening": "I am Roberto Lima, my cough has been getting worse and I have been feeling really sad lately",
+    },
+    "Joao Santos": {
+        "priority": "emergency",
+        "risk": "critical",
+        "patient_id": "2610",
+        "opening": "Hi, I am Joao Santos, I have been having chest pain",
+    },
 }
 
 
@@ -486,6 +508,92 @@ def cmd_runs():
     print()
 
 
+async def _auto_single(patient_name, max_turns=15):
+    from patient_sim import generate_response, get_persona
+
+    persona = get_persona(patient_name)
+    if not persona:
+        persona = EXPECTED.get(patient_name, {})
+        if not persona:
+            print(f"Unknown patient: {patient_name}")
+            print(f"Available: {', '.join(EXPECTED.keys())}")
+            return
+
+    opening = persona.get("opening", EXPECTED.get(patient_name, {}).get("opening", ""))
+    if not opening:
+        print(f"No opening message for {patient_name}")
+        return
+
+    existing = _load_session()
+    if existing:
+        print(f"Existing session found for: {existing.get('patient_name', '?')}")
+        cmd_reset()
+
+    print(f"\n{'#'*60}")
+    print(f"# AUTO TEST: {patient_name}")
+    print(f"# Expected: priority={persona.get('priority') or EXPECTED.get(patient_name, {}).get('priority', '?')}, "
+          f"risk={persona.get('risk') or EXPECTED.get(patient_name, {}).get('risk', '?')}")
+    print(f"{'#'*60}\n")
+
+    await cmd_start(patient_name, opening)
+
+    conversation_history = []
+
+    for turn_num in range(max_turns):
+        session = _load_session()
+        if not session:
+            print("Session lost — stopping auto test.")
+            break
+
+        if session.get("priority"):
+            priority = session["priority"]
+            risk = session.get("risk", "?")
+            expected_p = persona.get("priority") or EXPECTED.get(patient_name, {}).get("priority", "?")
+            expected_r = persona.get("risk") or EXPECTED.get(patient_name, {}).get("risk", "?")
+            pf = _compute_pass_fail(priority, risk, expected_p, expected_r)
+            print(f"\n{'#'*60}")
+            print(f"# AUTO TEST COMPLETE: {patient_name}")
+            print(f"# Priority: {priority.upper()} (expected: {expected_p})")
+            print(f"# Risk: {risk.upper()} (expected: {expected_r})")
+            print(f"# Result: {pf.upper()}")
+            print(f"# Turns: {session.get('turn_count', 0)}")
+            print(f"{'#'*60}\n")
+            break
+
+        agent_response = session.get("last_response", "")
+        if not agent_response:
+            print("No agent response — stopping auto test.")
+            break
+
+        conversation_history.append({"role": "assistant", "content": agent_response})
+
+        print(f"\n--- Simulating patient response (turn {turn_num + 2}) ---")
+        patient_answer = generate_response(patient_name, agent_response, conversation_history)
+        conversation_history.append({"role": "user", "content": patient_answer})
+        print(f"Patient (simulated): {patient_answer}\n")
+
+        session = _load_session()
+        session["messages"].append({"type": "human", "content": patient_answer})
+        session["_current_patient_msg"] = patient_answer
+        _save_session(session)
+
+        await _invoke_agent(session)
+    else:
+        print(f"\nWARNING: max_turns ({max_turns}) reached for {patient_name} without triage completion.")
+
+    cmd_reset()
+
+
+async def cmd_auto(patient_name):
+    await _auto_single(patient_name)
+
+
+async def cmd_auto_all():
+    for patient_name in EXPECTED:
+        await _auto_single(patient_name)
+        print("\n" + "=" * 60 + "\n")
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -516,6 +624,17 @@ def main():
 
     elif cmd == "runs":
         cmd_runs()
+
+    elif cmd == "auto":
+        if len(sys.argv) < 3:
+            print("Usage: test_priority.py auto <patient_name>")
+            print(f"Available: {', '.join(EXPECTED.keys())}")
+            sys.exit(1)
+        patient_name = sys.argv[2]
+        asyncio.run(cmd_auto(patient_name))
+
+    elif cmd == "auto-all":
+        asyncio.run(cmd_auto_all())
 
     else:
         print(f"Unknown command: {cmd}")
