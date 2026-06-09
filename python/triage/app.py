@@ -30,8 +30,10 @@ _STEP_MAP = {
     "get_patient_observations": 1,
     "get_patient_allergies": 1,
     "get_patient_encounters": 1,
+    "reset_triage_session": 2,
     "get_next_triage_question": 2,
     "parse_symptoms": 2,
+    "analyze_patient_response": 2,
     "build_questionnaire_response_data": 2,
     "check_red_flags": 3,
     "assess_clinical_risk": 4,
@@ -65,45 +67,46 @@ _TOOL_ICONS = {
 def _summarize_tool_result(tool_name, output_str):
     try:
         data = json.loads(output_str)
-        if tool_name == "search_patients":
-            return f"{data.get('total', 0)} patient(s) found"
-        if tool_name == "get_patient":
-            return f"{data.get('name', '?')}, DOB {data.get('birthDate', '?')}"
-        if tool_name.startswith("get_patient_"):
-            total = data.get("total", 0)
-            resource = tool_name.replace("get_patient_", "")
-            return f"{total} {resource} retrieved"
-        if tool_name == "parse_symptoms":
-            n = len(data.get("identified_symptoms", []))
-            return f"{n} symptom(s), {data.get('estimated_severity', '?')}"
-        if tool_name == "check_red_flags":
-            n = data.get("alert_count", 0)
-            crit = data.get("has_critical_red_flag", False)
-            return f"{n} alert(s)" + (" ⚠️ CRITICAL" if crit else "")
-        if tool_name == "assess_clinical_risk":
-            return f"{data.get('risk_level', '?').upper()} (score {data.get('risk_score', 0)})"
-        if tool_name == "suggest_priority":
-            return data.get("priority_label", "?")
-        if tool_name == "generate_clinical_summary":
-            return f"risk={data.get('risk_level', '?')}, priority={data.get('priority', '?')}"
-        if tool_name == "identify_follow_up_tasks":
-            return f"{data.get('total', 0)} task(s)"
-        if tool_name.startswith("create_"):
-            rid = data.get("resource", data.get("id", "?"))
-            if isinstance(rid, str):
-                return f"Created {rid}"
-            return "Created"
-        if tool_name == "get_next_triage_question":
-            q = data.get("question")
-            if q is None:
-                return "No more questions"
-            return f"1 question ({data.get('total_remaining', 0)} remaining)"
-        if tool_name == "build_questionnaire_response_data":
-            return f"{data.get('total', 0)} items structured"
-        return "Done"
     except (json.JSONDecodeError, TypeError):
         text = output_str.strip()
         return text[:77] + "..." if len(text) > 80 else text or "Done"
+
+    if tool_name == "search_patients":
+        return f"{data.get('total', 0)} patient(s) found"
+    if tool_name == "get_patient":
+        return f"{data.get('name', '?')}, DOB {data.get('birthDate', '?')}"
+    if tool_name.startswith("get_patient_"):
+        total = data.get("total", 0)
+        resource = tool_name.replace("get_patient_", "")
+        return f"{total} {resource} retrieved"
+    if tool_name == "parse_symptoms":
+        n = len(data.get("identified_symptoms", []))
+        return f"{n} symptom(s), {data.get('estimated_severity', '?')}"
+    if tool_name == "check_red_flags":
+        n = data.get("alert_count", 0)
+        crit = data.get("has_critical_red_flag", False)
+        return f"{n} alert(s)" + (" ⚠️ CRITICAL" if crit else "")
+    if tool_name == "assess_clinical_risk":
+        return f"{data.get('risk_level', '?').upper()} (score {data.get('risk_score', 0)})"
+    if tool_name == "suggest_priority":
+        return data.get("priority_label", "?")
+    if tool_name == "generate_clinical_summary":
+        return f"risk={data.get('risk_level', '?')}, priority={data.get('priority', '?')}"
+    if tool_name == "identify_follow_up_tasks":
+        return f"{data.get('total', 0)} task(s)"
+    if tool_name.startswith("create_"):
+        rid = data.get("resource", data.get("id", "?"))
+        return f"Created {rid}" if isinstance(rid, str) else "Created"
+    if tool_name == "reset_triage_session":
+        return "Session reset"
+    if tool_name == "get_next_triage_question":
+        q = data.get("question")
+        if q is None:
+            return "No more questions"
+        return f"1 question ({data.get('total_remaining', 0)} remaining)"
+    if tool_name == "build_questionnaire_response_data":
+        return f"{data.get('total', 0)} items structured"
+    return "Done"
 
 
 def _summarize_tool_input(tool_name, tool_input):
