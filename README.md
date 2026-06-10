@@ -1,3 +1,5 @@
+> This project was inspired in the [**suggested task #10 (Conversational FHIR Triage Assistant)**](https://community.intersystems.com/post/intersystems-programming-contest-ai-agents-fhir) for the InterSystems Programming Contest: AI Agents for FHIR
+
 # TriageAide — FHIR-First Pre-Consultation Triage
 
 TriageAide is an AI agent that retrieves a patient's FHIR clinical history, conducts a personalized pre-consultation triage via **chat**, and writes structured triage results back to the FHIR server — so the physician receives a ready-made clinical summary before the appointment.
