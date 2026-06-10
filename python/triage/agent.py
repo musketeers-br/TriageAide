@@ -8,6 +8,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from pydantic import BaseModel, create_model
 
 load_dotenv(override=True)
@@ -228,6 +229,37 @@ def _fix_tool_args_schema(tools):
     return fixed
 
 
+def _create_llm(cache=None, temperature=None, max_tokens=None):
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    model_name = os.getenv("LLM_MODEL")
+
+    if provider == "ollama":
+        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+        if not model_name:
+            model_name = "qwen3.5:0.8b"
+        logger.info("Using Ollama LLM: model=%s base_url=%s", model_name, ollama_url)
+        kwargs = {"model": model_name, "base_url": ollama_url, "reasoning": False}
+        if cache is not None:
+            kwargs["cache"] = cache
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            kwargs["num_predict"] = max_tokens
+        return ChatOllama(**kwargs)
+
+    if not model_name:
+        model_name = "gpt-4o-mini"
+    logger.info("Using OpenAI LLM: model=%s", model_name)
+    kwargs = {"model": model_name}
+    if cache is not None:
+        kwargs["cache"] = cache
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    return ChatOpenAI(**kwargs)
+
+
 async def create_triage_agent(voice_mode: bool = False, cache_namespace: str = ""):
     logger.info("Creating triage agent | voice_mode=%s | cache_ns=%s", voice_mode, cache_namespace or "(none)")
     client = MultiServerMCPClient(get_mcp_config())
@@ -248,10 +280,7 @@ async def create_triage_agent(voice_mode: bool = False, cache_namespace: str = "
 
     all_tools = wrap_tools_with_cache(all_tools, tool_cache)
 
-    model_kwargs = {}
-    if llm_cache is not None:
-        model_kwargs["cache"] = llm_cache
-    model = ChatOpenAI(model="gpt-4o-mini", **model_kwargs)
+    model = _create_llm(cache=llm_cache)
 
     agent = create_agent(
         model,

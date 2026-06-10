@@ -53,7 +53,7 @@ services:
       - ollama-data:/root/.ollama
     environment:
       - OLLAMA_DEBUG=1
-    entrypoint: ["sh", "-c", "ollama serve & sleep 5 && ollama pull gemma3:1b && wait"]
+    entrypoint: ["sh", "-c", "ollama serve & sleep 5 && ollama pull qwen3.5:0.8b && wait"]
     networks:
       - fhir-net
 

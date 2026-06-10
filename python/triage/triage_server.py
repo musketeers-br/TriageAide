@@ -3,7 +3,7 @@ import os
 import time
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from langchain_openai import ChatOpenAI
+from agent import _create_llm
 from langchain_core.messages import SystemMessage, HumanMessage
 from logging_config import setup_logging
 
@@ -13,9 +13,9 @@ logger = setup_logging("triage_server", "triage_server.log")
 
 mcp = FastMCP("TriageServer")
 
-_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3, max_tokens=800)
+_llm = _create_llm(temperature=0.3, max_tokens=800)
 
-logger.info("Triage MCP Server initializing | model=gpt-4o-mini")
+logger.info("Triage MCP Server initializing | provider=%s model=%s", os.getenv("LLM_PROVIDER", "openai"), os.getenv("LLM_MODEL", "qwen3.5:0.8b"))
 
 
 _session_state: dict[str, dict] = {}

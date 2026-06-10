@@ -5,7 +5,7 @@ Usage:
   python3 patient_sim.py "Ana Costa" "Can you describe the chest pain?"
   python3 patient_sim.py list
 
-Requires Ollama container running with gemma3:1b model pulled.
+Requires Ollama container running with qwen3.5:0.8b model pulled.
 Set OLLAMA_BASE_URL to override default (http://ollama:11434 from container,
 http://localhost:11434 from host).
 """
@@ -18,7 +18,7 @@ import sys
 import httpx
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:1b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:0.8b")
 
 PERSONAS = {
     "Ana Costa": {
@@ -189,6 +189,7 @@ def generate_response(patient_name, agent_message, conversation_history=None):
                 "model": OLLAMA_MODEL,
                 "messages": messages,
                 "stream": False,
+                "think": False,
                 "options": {
                     "num_predict": 80,
                     "temperature": 0.8,

@@ -2,7 +2,7 @@ import json
 import os
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from langchain_openai import ChatOpenAI
+from agent import _create_llm
 from langchain_core.messages import SystemMessage, HumanMessage
 from logging_config import setup_logging
 
@@ -12,9 +12,9 @@ logger = setup_logging("clinical_reasoning_server", "cr_server.log")
 
 mcp = FastMCP("ClinicalReasoningServer")
 
-_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3, max_tokens=1200)
+_llm = _create_llm(temperature=0.3, max_tokens=1200)
 
-logger.info("Clinical Reasoning MCP Server initializing | model=gpt-4o-mini")
+logger.info("Clinical Reasoning MCP Server initializing | provider=%s model=%s", os.getenv("LLM_PROVIDER", "openai"), os.getenv("LLM_MODEL", "qwen3.5:0.8b"))
 
 
 async def _llm_json(system_prompt: str, user_prompt: str, fallback: dict = None) -> str:
