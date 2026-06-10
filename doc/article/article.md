@@ -1,5 +1,7 @@
 _An AI agent reads the FHIR patient record before the consultation, asks the right questions based on what it already knows, detects critical red flags, and writes its findings back — so the physician arrives prepared._
 
+> This project was inspired in the [**suggested task #10 (Conversational FHIR Triage Assistant)**](https://community.intersystems.com/post/intersystems-programming-contest-ai-agents-fhir) for the InterSystems Programming Contest: AI Agents for FHIR
+
 ---
 
 ## Healthcare Pain Points Addressed
