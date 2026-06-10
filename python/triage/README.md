@@ -20,9 +20,10 @@ app.py (Gradio :7860) — web chat UI with trace panel
 entrypoint.sh — container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
 ```
 
-Two independent Docker services on a shared `fhir-net` bridge network:
+Three Docker services on a shared `fhir-net` bridge network:
 - **iris** — IRIS for Health FHIR server
 - **triage** — Python app (MCP servers + agent + Gradio UI)
+- **ollama** — Local LLM server (gemma3:1b) for patient simulation in automated tests
 
 ## Agent Flow (5 mandatory steps)
 
@@ -37,6 +38,7 @@ Two independent Docker services on a shared `fhir-net` bridge network:
 - Docker + Docker Compose
 - OpenAI API Key (gpt-4o-mini model)
 - (Optional) LangSmith API key for agent tracing
+- (Optional, for automated patient simulation) Ollama container with gemma3:1b
 
 ## How to Run via Docker
 
@@ -103,6 +105,7 @@ FHIR_BASE_URL=http://iris:52773/fhir/r4 OPENAI_API_KEY=sk-... python3 app.py
 | 8002 | 8002 | Clinical Reasoning MCP Server |
 | 7860 | 7860 | Gradio Web UI |
 | 8003 | 8003 | Voice Bridge *(roadmap — always runs for testing)* |
+| 11434 | 11434 | Ollama LLM server (patient simulation) |
 
 ## Test Patients
 
@@ -129,6 +132,65 @@ FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py list
 ```
 
 **Note:** Patient IDs change on each reload. Use the patient's name when talking to the agent.
+
+## Patient Simulator (Ollama)
+
+The `patient_sim.py` module uses a local LLM (Ollama with `gemma3:1b`) to role-play as each test patient, enabling fully automated triage conversations. Each patient has a detailed persona with medical history, current symptoms, personality traits, and behavioral rules.
+
+### Start the Ollama Container
+
+```bash
+docker compose up -d ollama
+```
+
+The container automatically pulls the `gemma3:1b` model on first startup. Model data is persisted in the `ollama-data` named volume.
+
+### Patient Simulator CLI
+
+```bash
+# List available patient personas
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 patient_sim.py list'
+
+# Check if Ollama is running and the model is available
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 patient_sim.py check'
+
+# Get a patient's opening message
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 patient_sim.py "Ana Costa"'
+
+# Simulate a patient response to an agent question
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 patient_sim.py "Ana Costa" "Can you describe your symptoms?"'
+```
+
+> **Note:** Always set `OLLAMA_BASE_URL=http://ollama:11434` when running inside the triage container (Docker network hostname). From the host, use `http://localhost:11434`.
+
+### Automated Triage Tests
+
+The `test_priority.py` harness supports automated end-to-end triage conversations using the patient simulator. The agent chats with a simulated patient until it assigns a priority, then compares the result against expected values.
+
+```bash
+# Ensure Ollama is running
+docker compose up -d ollama
+
+# Run automated triage for a single patient
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 test_priority.py auto "Ana Costa"'
+
+# Run automated triage for all 4 patients sequentially
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 test_priority.py auto-all'
+```
+
+The `auto` command:
+1. Resets any existing session
+2. Starts the triage agent with the patient's opening message
+3. Loops (up to 15 turns): feeds the agent's response to the patient simulator, sends the simulated reply back
+4. Stops when the agent assigns a priority — prints pass/fail against expected values
+5. Resets the session after completion
+
+### Patient Simulator Configuration
+
+| Env Var | Default | Description |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama API URL (use `http://localhost:11434` from host) |
+| `OLLAMA_MODEL` | `gemma3:1b` | Ollama model to use for patient simulation |
 
 ## Usage
 
@@ -159,8 +221,9 @@ python/triage/
 requirements.txt            # Python dependencies
 Dockerfile                  # Python 3.12-slim image for the triage service
 entrypoint.sh               # Container entrypoint (waits for FHIR, loads seed, starts MCP + Gradio)
-seed_data.py                # Script to load/clean/list test patients
-seed_data/                  # FHIR JSON bundles for loading
+seed_data.py # Script to load/clean/list test patients
+seed_data/ # FHIR JSON bundles for loading
+patient_sim.py # Patient simulator (Ollama-based) for automated triage testing
     patient_maria_silva.json
     patient_joao_santos.json
     patient_ana_costa.json
@@ -172,6 +235,7 @@ logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file
 agent.py # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
 app.py # Gradio chat UI with trace panel — Web
+test_priority.py # Priority test harness (manual + automated with patient simulation)
 voice_bridge.py # Voice Bridge — OpenAI-compatible API for ElevenLabs (port 8003) *(roadmap)*
 voice_session.py # Voice session store (language detection, auto-eviction) *(roadmap)*
 tunnel.sh # SSH tunnel script (localhost.run) for public Voice Bridge access
@@ -488,4 +552,4 @@ docker compose exec triage bash -c 'echo $VOICE_BRIDGE_SECRET | wc -c'
 - **UI**: Gradio ChatInterface with trace panel
 - **Observability**: LangSmith tracing (optional) + structured logging (LOG_LEVEL)
 - **Language**: Python 3
-- **Deploy**: Docker Compose (2 services: iris + triage)
+- **Deploy**: Docker Compose (3 services: iris + triage + ollama)

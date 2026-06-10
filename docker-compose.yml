@@ -29,6 +29,7 @@ services:
     container_name: triage-app
     depends_on:
       - iris
+      - ollama
     env_file:
       - ./python/triage/.env
     ports:
@@ -42,6 +43,23 @@ services:
     networks:
       - fhir-net
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: always
+    ports:
+      - 11434:11434
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_DEBUG=1
+    entrypoint: ["sh", "-c", "ollama serve & sleep 5 && ollama pull gemma3:1b && wait"]
+    networks:
+      - fhir-net
+
 networks:
   fhir-net:
     driver: bridge
+
+volumes:
+  ollama-data:

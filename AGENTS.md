@@ -100,11 +100,35 @@ do ##class(FHIR.utils).uninstall("PID")
 ### Testing
 - No automated unit test framework is configured in this repository
 - Manual testing via FHIR API calls (curl/Postman) and the demo UI
+- **Automated patient simulation tests**: See Patient Simulator section below
 - **Clean-slate build verification**: See [`doc/build-test-plan.md`](doc/build-test-plan.md) for a full Phase 0–6 plan to wipe all Docker artifacts and rebuild from scratch following the README
 - FHIR API endpoint: `http://localhost:32783/fhir/r4`
 - Swagger UI: `http://localhost:32783/swagger-ui/index.html`
 - Demo UI: `http://localhost:32783/fhirUI/FHIRAppDemo.html`
 - Patient Portal: `http://localhost:32783/fhir/portal/patientlist.html`
+
+### Patient Simulator (Ollama)
+
+Automated triage testing using Ollama (`gemma3:1b`) to role-play as each test patient:
+
+```bash
+# Start the Ollama container
+docker compose up -d ollama
+
+# Run automated triage for a single patient
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 test_priority.py auto "Ana Costa"'
+
+# Run automated triage for all 4 patients
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 test_priority.py auto-all'
+
+# List available patient personas
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 patient_sim.py list'
+
+# Check if Ollama is running
+docker compose exec triage bash -c 'cd /app && OLLAMA_BASE_URL=http://ollama:11434 python3 patient_sim.py check'
+```
+
+> **Note:** Always set `OLLAMA_BASE_URL=http://ollama:11434` when running inside the triage container (Docker network hostname). From the host, use `http://localhost:11434`.
 
 ### IPM (InterSystems Package Manager)
 ```bash
@@ -144,20 +168,26 @@ zpm "load /home/irisowner/irisdev/ -v"
 
 ### Docker / Infrastructure
 
-Two separate Docker services on a shared `fhir-net` bridge network:
+Three Docker services on a shared `fhir-net` bridge network:
 
 - **iris service**:
-  - Base image: `intersystemsdc/irishealth-community:latest`
-  - Ports: 32782→1972 (IRIS SuperServer), 32783→52773 (Web/REST), 32784→53773
-  - Container name: `fhir-template`
-  - Multi-stage build: builder stage compiles/loads; final stage copies data only
+- Base image: `intersystemsdc/irishealth-community:latest`
+- Ports: 32782→1972 (IRIS SuperServer), 32783→52773 (Web/REST), 32784→53773
+- Container name: `fhir-template`
+- Multi-stage build: builder stage compiles/loads; final stage copies data only
 - **triage service**:
-  - Base image: `python:3.12-slim`
-  - Ports: 8000→8000 (FHIR MCP), 8001→8001 (Triage MCP), 8002→8002 (Clinical Reasoning MCP), 7860→7860 (Gradio UI)
-  - Container name: `triage-app`
-  - Depends on `iris` service
-  - Volume-mounted `./python/triage:/app` for live editing
-  - **Internal networking**: Triage container reaches FHIR at `http://iris:52773/fhir/r4`
+- Base image: `python:3.12-slim`
+- Ports: 8000→8000 (FHIR MCP), 8001→8001 (Triage MCP), 8002→8002 (Clinical Reasoning MCP), 7860→7860 (Gradio UI)
+- Container name: `triage-app`
+- Depends on `iris` and `ollama` services
+- Volume-mounted `./python/triage:/app` for live editing
+- **ollama service**:
+- Base image: `ollama/ollama:latest`
+- Port: 11434→11434 (Ollama API)
+- Container name: `ollama`
+- Auto-pulls `gemma3:1b` on first startup
+- Named volume `ollama-data` for model persistence
+- **Internal networking**: Triage container reaches FHIR at `http://iris:52773/fhir/r4` and Ollama at `http://ollama:11434`
 - **Default credentials**: `_SYSTEM` / `SYS` (dev only; configured in `.vscode/settings.json`)
 
 ### Frontend (fhirUI/)
@@ -209,6 +239,8 @@ Two separate Docker services on a shared `fhir-net` bridge network:
 - `python/triage/.env.example` — Template without credentials (LOG_LEVEL defaults to DEBUG)
 - `python/triage/seed_data.py` — Load/clean/list test patients
 - `python/triage/seed_data/` — FHIR Bundle JSON files for 4 test patients
+- `python/triage/patient_sim.py` — Patient simulator (Ollama-based) for automated triage testing
+- `python/triage/test_priority.py` — Priority test harness (manual + automated with patient simulation)
 - `python/triage/Dockerfile` — Python 3.12-slim image for the triage service
 - `python/triage/entrypoint.sh` — Container entrypoint (waits for FHIR, loads seed data, starts MCP servers + Gradio)
 - `python/triage/start_servers.sh` — Manual start script for MCP servers + Gradio
@@ -256,8 +288,10 @@ logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file
 agent.py # Core agent factory (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
   cli.py                                # CLI interactive interface
   app.py                                # Gradio web UI chat with trace panel
-  seed_data.py                          # Test patient load/clean/list script
-  seed_data/                            # FHIR Bundle JSON for 4 test patients
+seed_data.py # Test patient load/clean/list script
+seed_data/ # FHIR Bundle JSON for 4 test patients
+patient_sim.py # Patient simulator (Ollama-based) for automated triage testing
+test_priority.py # Priority test harness (manual + automated with patient simulation)
   .env.example                          # Config template (no real credentials)
   requirements.txt                      # Python dependencies
   Dockerfile                            # Python 3.12-slim image for triage service
@@ -275,7 +309,7 @@ iris.script                             # IRIS initialization script (runs on do
 merge.cpf                               # CPF merge actions (namespaces, databases)
 module.xml                              # IPM package definition
 Dockerfile                              # Multi-stage Docker build (IRIS for Health only)
-docker-compose.yml                      # Docker Compose configuration (iris + triage services)
+docker-compose.yml # Docker Compose configuration (iris + triage + ollama services)
 ```
 
 ## Important Notes

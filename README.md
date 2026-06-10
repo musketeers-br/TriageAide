@@ -1,4 +1,4 @@
-> This project was inspired in the [**suggested task #10 (Conversational FHIR Triage Assistant)**](https://community.intersystems.com/post/intersystems-programming-contest-ai-agents-fhir) for the InterSystems Programming Contest: AI Agents for FHIR:
+> This project was inspired in the [**suggested task #10 (Conversational FHIR Triage Assistant)**](https://community.intersystems.com/post/intersystems-programming-contest-ai-agents-fhir) for the InterSystems Programming Contest: AI Agents for FHIR
 
 # TriageAide — FHIR-First Pre-Consultation Triage
 
