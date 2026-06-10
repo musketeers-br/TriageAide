@@ -167,9 +167,7 @@ def check_ollama():
 def generate_response(patient_name, agent_message, conversation_history=None):
     persona = get_persona(patient_name)
     if not persona:
-        print(f"Unknown patient: {patient_name}")
-        print(f"Available: {', '.join(PERSONAS.keys())}")
-        sys.exit(1)
+        raise ValueError(f"Unknown patient: {patient_name}. Available: {', '.join(PERSONAS.keys())}")
 
     messages = [{"role": "system", "content": persona["system_prompt"]}]
 
@@ -203,12 +201,9 @@ def generate_response(patient_name, agent_message, conversation_history=None):
         response = re.sub(r'^["\']|["\']$', "", response)
         return response
     except httpx.ConnectError:
-        print(f"ERROR: Cannot connect to Ollama at {OLLAMA_BASE_URL}")
-        print("Make sure the ollama container is running: docker compose up -d ollama")
-        sys.exit(1)
+        raise ConnectionError(f"Cannot connect to Ollama at {OLLAMA_BASE_URL}. Make sure the ollama container is running: docker compose up -d ollama")
     except httpx.HTTPStatusError as e:
-        print(f"ERROR: Ollama returned {e.response.status_code}: {e.response.text[:200]}")
-        sys.exit(1)
+        raise RuntimeError(f"Ollama returned {e.response.status_code}: {e.response.text[:200]}") from e
 
 
 def main():

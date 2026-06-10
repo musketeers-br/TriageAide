@@ -10,6 +10,7 @@ import gradio as gr
 from gradio import ChatMessage
 
 from agent import create_triage_agent, extract_ai_response
+from patient_sim import generate_response, get_persona, PERSONAS
 from logging_config import setup_logging
 
 load_dotenv(override=True)
@@ -570,6 +571,94 @@ async def on_submit(message, chat_hist, trace_hist, mode):
                 yield update, [], ""
 
 
+def _content_str(content):
+    if isinstance(content, list):
+        return " ".join(
+            item.get("text", str(item)) if isinstance(item, dict) else str(item)
+            for item in content
+        )
+    return str(content) if content is not None else ""
+
+
+def _msg_role(msg):
+    if isinstance(msg, dict):
+        return msg.get("role")
+    return getattr(msg, "role", None)
+
+
+def _msg_content(msg):
+    if isinstance(msg, dict):
+        return msg.get("content")
+    return getattr(msg, "content", None)
+
+
+def _msg_metadata(msg):
+    if isinstance(msg, dict):
+        return msg.get("metadata")
+    return getattr(msg, "metadata", None)
+
+
+def _extract_conversation_history(chat_hist):
+    history = []
+    for msg in chat_hist:
+        role = _msg_role(msg)
+        raw = _msg_content(msg)
+        if not role or not raw:
+            continue
+        content = _content_str(raw)
+        metadata = _msg_metadata(msg)
+        if metadata and metadata.get("title"):
+            continue
+        if role == "assistant":
+            text = content
+            if "\n---\n" in text:
+                text = text.split("\n---\n")[0]
+            history.append({"role": "assistant", "content": text})
+        elif role == "user":
+            history.append({"role": "user", "content": content})
+    return history
+
+
+def _get_last_agent_message(chat_hist):
+    for msg in reversed(chat_hist):
+        role = _msg_role(msg)
+        raw = _msg_content(msg)
+        if role != "assistant":
+            continue
+        if not raw:
+            continue
+        metadata = _msg_metadata(msg)
+        if metadata and metadata.get("title"):
+            continue
+        text = _content_str(raw)
+        if "\n---\n" in text:
+            text = text.split("\n---\n")[0]
+        return text
+    return None
+
+
+def on_simulate(chat_hist, persona_name):
+    if not persona_name or persona_name not in PERSONAS:
+        return "Select a patient persona first."
+
+    persona = get_persona(persona_name)
+
+    if not chat_hist:
+        return persona["opening"]
+
+    last_agent_msg = _get_last_agent_message(chat_hist)
+    if not last_agent_msg:
+        return persona["opening"]
+
+    conversation_history = _extract_conversation_history(chat_hist)
+
+    try:
+        patient_reply = generate_response(persona_name, last_agent_msg, conversation_history)
+        return patient_reply
+    except Exception as e:
+        return f"⚠️ Simulation error: {type(e).__name__}: {str(e)[:200]}"
+
+
 CSS = """
 .stretch.svelte-7xavid { flex-wrap: nowrap !important; }
 .stretch > .column > .form,
@@ -625,6 +714,15 @@ def main():
                             )
                             send_btn = gr.Button("Send", variant="primary", scale=1)
                         with gr.Row():
+                            persona_dropdown = gr.Dropdown(
+                                choices=list(PERSONAS.keys()),
+                                value=list(PERSONAS.keys())[0],
+                                label="🤖 Patient Persona",
+                                scale=3,
+                                interactive=True,
+                            )
+                            sim_btn = gr.Button("🤖 Simulate", variant="secondary", scale=1)
+                        with gr.Row():
                             gr.Examples(
                                 examples=[
                                     "Hi, I'm Maria Silva and I've been feeling really thirsty lately",
@@ -652,128 +750,134 @@ def main():
                         )
                         clear_trace = gr.Button("Clear Trace", size="sm")
 
-        if _show_voice_ui:
-            with gr.Tab("🎙️ Voice (ElevenLabs)"):
-                gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
-                gr.Markdown(
-                    "Speak with the triage agent in **English** or **Português (Brasil)**. "
-                    "The agent responds in the language you use.\n\n"
-                    "Fale com o agente de triagem em **inglês** ou **Português (Brasil)**. "
-                    "O agente responde no idioma que você usar."
-                )
-
-                _el_agent_id = os.getenv("ELEVENLABS_WIDGET_ID", "") or os.getenv("ELEVENLABS_AGENT_ID", "")
-                _bridge_url = os.getenv("VOICE_BRIDGE_URL", "http://localhost:8003")
-
-                def _widget_html(agent_id: str) -> str:
-                    agent_id = (agent_id or "").strip()
-                    if not agent_id:
-                        return (
-                            '<div style="padding:32px;text-align:center;color:#6b7280;">'
-                            '<p style="font-size:15px;">Enter your ElevenLabs Agent ID above and click '
-                            '<strong>Load Widget</strong>.<br>'
-                            'Digite o ID do agente ElevenLabs acima e clique em '
-                            '<strong>Carregar Widget</strong>.</p>'
-                            '</div>'
+                if _show_voice_ui:
+                    with gr.Tab("🎙️ Voice (ElevenLabs)"):
+                        gr.Markdown("## Voice-Enabled Triage / Triagem por Voz")
+                        gr.Markdown(
+                            "Speak with the triage agent in **English** or **Português (Brasil)**. "
+                            "The agent responds in the language you use.\n\n"
+                            "Fale com o agente de triagem em **inglês** ou **Português (Brasil)**. "
+                            "O agente responde no idioma que você usar."
                         )
-                    local_bridge = "http://localhost:8003"
-                    iframe_url = f"{local_bridge}/widget?agent_id={agent_id}"
-                    return (
-                        '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;">'
-                        f'<elevenlabs-convai agent-id="{agent_id}" '
-                        'style="width:100%;max-width:560px;min-height:420px;"></elevenlabs-convai>'
-                        '<details style="width:100%;max-width:560px;">'
-                        '<summary style="cursor:pointer;color:#6b7280;font-size:13px;padding:4px 0;">'
-                        '🔄 Widget not showing? Try the standalone version / Widget não apareceu? Tente a versão standalone'
-                        '</summary>'
-                        f'<iframe src="{iframe_url}" width="100%" height="480" '
-                        'style="border:1px solid #e5e7eb;border-radius:12px;margin-top:8px;" '
-                        'allow="microphone; camera; autoplay; clipboard-write" allowfullscreen>'
-                        '</iframe>'
-                        '</details>'
-                        '</div>'
-                    )
 
-                with gr.Row():
-                    agent_id_box = gr.Textbox(
-                        value=_el_agent_id,
-                        placeholder="agent_XXXXXXXXXXXXXXXXXXXXXXXX",
-                        label="ElevenLabs Agent ID",
-                        scale=5,
-                        interactive=True,
-                    )
-                    load_widget_btn = gr.Button("🎙️ Load Widget / Carregar Widget", variant="primary", scale=2)
+                        _el_agent_id = os.getenv("ELEVENLABS_WIDGET_ID", "") or os.getenv("ELEVENLABS_AGENT_ID", "")
+                        _bridge_url = os.getenv("VOICE_BRIDGE_URL", "http://localhost:8003")
 
-                voice_widget = gr.HTML(value=_widget_html(_el_agent_id))
+                        def _widget_html(agent_id: str) -> str:
+                            agent_id = (agent_id or "").strip()
+                            if not agent_id:
+                                return (
+                                    '<div style="padding:32px;text-align:center;color:#6b7280;">'
+                                    '<p style="font-size:15px;">Enter your ElevenLabs Agent ID above and click '
+                                    '<strong>Load Widget</strong>.<br>'
+                                    'Digite o ID do agente ElevenLabs acima e clique em '
+                                    '<strong>Carregar Widget</strong>.</p>'
+                                    '</div>'
+                                )
+                            local_bridge = "http://localhost:8003"
+                            iframe_url = f"{local_bridge}/widget?agent_id={agent_id}"
+                            return (
+                                '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px;">'
+                                f'<elevenlabs-convai agent-id="{agent_id}" '
+                                'style="width:100%;max-width:560px;min-height:420px;"></elevenlabs-convai>'
+                                '<details style="width:100%;max-width:560px;">'
+                                '<summary style="cursor:pointer;color:#6b7280;font-size:13px;padding:4px 0;">'
+                                '🔄 Widget not showing? Try the standalone version / Widget não apareceu? Tente a versão standalone'
+                                '</summary>'
+                                f'<iframe src="{iframe_url}" width="100%" height="480" '
+                                'style="border:1px solid #e5e7eb;border-radius:12px;margin-top:8px;" '
+                                'allow="microphone; camera; autoplay; clipboard-write" allowfullscreen>'
+                                '</iframe>'
+                                '</details>'
+                                '</div>'
+                            )
 
-                load_widget_btn.click(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
-                agent_id_box.submit(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
+                        with gr.Row():
+                            agent_id_box = gr.Textbox(
+                                value=_el_agent_id,
+                                placeholder="agent_XXXXXXXXXXXXXXXXXXXXXXXX",
+                                label="ElevenLabs Agent ID",
+                                scale=5,
+                                interactive=True,
+                            )
+                            load_widget_btn = gr.Button("🎙️ Load Widget / Carregar Widget", variant="primary", scale=2)
 
-                with gr.Accordion("⚙️ Setup Instructions / Instruções de Configuração", open=not bool(_el_agent_id)):
-                    gr.Markdown(f"""
-                    **English — Custom LLM setup:**
-                    1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
-                    2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
-                    3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-                    4. Select a Brazilian Portuguese voice
-                    5. Copy the Agent ID from the URL and paste it in the field above
+                        voice_widget = gr.HTML(value=_widget_html(_el_agent_id))
 
-                    **Português — Configuração do Custom LLM:**
-                    1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
-                    2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
-                    3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
-                    4. Selecione uma voz em Português do Brasil
-                    5. Copie o Agent ID da URL e cole no campo acima
-                    """)
+                        load_widget_btn.click(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
+                        agent_id_box.submit(fn=_widget_html, inputs=[agent_id_box], outputs=[voice_widget])
 
-                with gr.Row():
-                    gr.Markdown(
-                        f"**Voice Bridge:** `{_bridge_url}/v1/chat/completions` &nbsp;|&nbsp; "
-                        f"**Health:** `{_bridge_url}/health`"
-                    )
+                        with gr.Accordion("⚙️ Setup Instructions / Instruções de Configuração", open=not bool(_el_agent_id)):
+                            gr.Markdown(f"""
+**English — Custom LLM setup:**
+1. In ElevenLabs dashboard → **Configure → Agent** → set **LLM** to *Custom LLM*
+2. Set **LLM URL**: `{_bridge_url}/v1/chat/completions`
+3. Set **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
+4. Select a Brazilian Portuguese voice
+5. Copy the Agent ID from the URL and paste it in the field above
 
-        trace_state = gr.State([])
+**Português — Configuração do Custom LLM:**
+1. No dashboard ElevenLabs → **Configure → Agent** → defina **LLM** como *Custom LLM*
+2. Configure **LLM URL**: `{_bridge_url}/v1/chat/completions`
+3. Configure **Authorization**: `Bearer <VOICE_BRIDGE_SECRET>`
+4. Selecione uma voz em Português do Brasil
+5. Copie o Agent ID da URL e cole no campo acima
+                            """)
 
-        def switch_mode(mode):
-            if mode == "Side-by-side":
-                return gr.update(visible=True), gr.update(visible=True), mode
-            else:
-                return gr.update(visible=True), gr.update(visible=False), mode
+                        with gr.Row():
+                            gr.Markdown(
+                                f"**Voice Bridge:** `{_bridge_url}/v1/chat/completions` &nbsp;|&nbsp; "
+                                f"**Health:** `{_bridge_url}/health`"
+                            )
 
-        view_toggle.change(
-            fn=switch_mode,
-            inputs=[view_toggle],
-            outputs=[chat_col, trace_col, view_mode],
-        )
+            trace_state = gr.State([])
 
-        msg_input.submit(
-            fn=on_submit,
-            inputs=[msg_input, chatbot, trace_state, view_mode],
-            outputs=[chatbot, trace, msg_input],
-        )
+            def switch_mode(mode):
+                if mode == "Side-by-side":
+                    return gr.update(visible=True), gr.update(visible=True), mode
+                else:
+                    return gr.update(visible=True), gr.update(visible=False), mode
 
-        send_btn.click(
-            fn=on_submit,
-            inputs=[msg_input, chatbot, trace_state, view_mode],
-            outputs=[chatbot, trace, msg_input],
-        )
+            view_toggle.change(
+                fn=switch_mode,
+                inputs=[view_toggle],
+                outputs=[chat_col, trace_col, view_mode],
+            )
 
-        clear_trace.click(
-            fn=lambda: ([],),
-            inputs=[],
-            outputs=[trace],
-        )
+            msg_input.submit(
+                fn=on_submit,
+                inputs=[msg_input, chatbot, trace_state, view_mode],
+                outputs=[chatbot, trace, msg_input],
+            )
 
-        def clear_everything():
-            global _session_messages
-            _session_messages = []
-            return [], [], ""
+            send_btn.click(
+                fn=on_submit,
+                inputs=[msg_input, chatbot, trace_state, view_mode],
+                outputs=[chatbot, trace, msg_input],
+            )
 
-        clear_all.click(
-            fn=clear_everything,
-            inputs=[],
-            outputs=[chatbot, trace, msg_input],
-        )
+            sim_btn.click(
+                fn=on_simulate,
+                inputs=[chatbot, persona_dropdown],
+                outputs=[msg_input],
+            )
+
+            clear_trace.click(
+                fn=lambda: ([],),
+                inputs=[],
+                outputs=[trace],
+            )
+
+            def clear_everything():
+                global _session_messages
+                _session_messages = []
+                return [], [], ""
+
+            clear_all.click(
+                fn=clear_everything,
+                inputs=[],
+                outputs=[chatbot, trace, msg_input],
+            )
 
     demo.launch(
         server_name="0.0.0.0",
