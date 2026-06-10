@@ -16,6 +16,37 @@ def _msg_type(msg):
     return kwargs.get("type", "")
 
 
+def _normalize_llm_string(llm_string):
+    """Normalize the llm_string so cache keys are stable across LangChain versions.
+
+    Older versions of langchain-openai included the full tool schemas and
+    stop=None in _get_llm_string(); newer versions omit tools and use stop=[].
+    This function strips the volatile parts, keeping only the model identity
+    (class name + kwargs.model_name), so the same model always produces the
+    same key regardless of library version.
+    """
+    if "---" in llm_string:
+        try:
+            parts = llm_string.split("---", 1)
+            model_info = json.loads(parts[0])
+            return json.dumps(
+                {
+                    "name": model_info.get("name", ""),
+                    "model": model_info.get("kwargs", {}).get("model_name", ""),
+                },
+                sort_keys=True,
+            )
+        except (json.JSONDecodeError, IndexError, TypeError):
+            return llm_string
+    try:
+        data = json.loads(llm_string)
+        if isinstance(data, dict) and "name" in data and "model" in data:
+            return llm_string
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return llm_string
+
+
 def _normalize_cache_prompt(prompt_str):
     """Derive a cache key from user messages + tool call history only.
 
@@ -32,6 +63,8 @@ def _normalize_cache_prompt(prompt_str):
     try:
         msgs = json.loads(prompt_str)
     except (json.JSONDecodeError, TypeError):
+        return prompt_str
+    if isinstance(msgs, dict) and "u" in msgs and "t" in msgs:
         return prompt_str
     user_contents = []
     tool_sequence = []
@@ -94,16 +127,16 @@ class _NormalizedSQLiteCache:
         BaseCache.register(_NormalizedSQLiteCache)
 
     def lookup(self, prompt, llm_string):
-        return self._inner.lookup(_normalize_cache_prompt(prompt), llm_string)
+        return self._inner.lookup(_normalize_cache_prompt(prompt), _normalize_llm_string(llm_string))
 
     async def alookup(self, prompt, llm_string):
-        return await self._inner.alookup(_normalize_cache_prompt(prompt), llm_string)
+        return await self._inner.alookup(_normalize_cache_prompt(prompt), _normalize_llm_string(llm_string))
 
     def update(self, prompt, llm_string, return_val):
-        return self._inner.update(_normalize_cache_prompt(prompt), llm_string, return_val)
+        return self._inner.update(_normalize_cache_prompt(prompt), _normalize_llm_string(llm_string), return_val)
 
     async def aupdate(self, prompt, llm_string, return_val):
-        return await self._inner.aupdate(_normalize_cache_prompt(prompt), llm_string, return_val)
+        return await self._inner.aupdate(_normalize_cache_prompt(prompt), _normalize_llm_string(llm_string), return_val)
 
     def clear(self, **kwargs):
         return self._inner.clear(**kwargs)

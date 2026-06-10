@@ -41,13 +41,9 @@ if [ -d "/app/cache" ]; then
   for db in /app/cache/langchain_cache_gradio.db /app/cache/tool_cache_gradio.db; do
     if [ -f "$db" ]; then
       target="/root/.cache/$(basename "$db")"
-      if [ ! -f "$target" ]; then
-        mkdir -p /root/.cache
-        cp "$db" "$target"
-        echo "Pre-populated cache: $(basename "$db")"
-      else
-        echo "Cache already exists: $(basename "$db") — skipping"
-      fi
+      mkdir -p /root/.cache
+      cp "$db" "$target"
+      echo "Pre-populated cache: $(basename "$db")"
     fi
   done
 fi
