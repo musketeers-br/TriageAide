@@ -133,6 +133,38 @@ FHIR_BASE_URL=http://iris:52773/fhir/r4 python3 seed_data.py list
 
 **Note:** Patient IDs change on each reload. Use the patient's name when talking to the agent.
 
+## Vector Search RAG (Clinical Reasoning)
+
+The Clinical Reasoning server can ground its risk/priority decision in similar past triage cases retrieved from InterSystems IRIS via native vector search (`VECTOR_COSINE` over a `%Vector` column). The knowledge base is the synthetic, ESI-labeled emergency-department dataset [olaflaitinen/fedmml-ed-triage](https://huggingface.co/datasets/olaflaitinen/fedmml-ed-triage).
+
+How it works:
+
+1. `ingest_knowledge.py` downloads the dataset, builds one canonical text document per case (`Patient / Chief complaint / Vitals / Notes`), embeds documents in batches, and upserts them into `TriageAide.TriageKnowledge` (idempotent, keyed by dataset row id).
+2. At assessment time, `clinical_assessment` builds a query document for the current patient **using the same template and the same embedding model**, retrieves the top-K cases above a cosine-similarity threshold, and injects them into the prompt as `Reference triage cases`.
+3. The system prompt instructs the LLM that ESI is an inverted 1–5 scale (1 = most critical; ESI 1–2 ≈ emergency, 3 ≈ urgent, 4–5 ≈ routine), that the cases are synthetic reference signal (not ground truth), and to cite the cases that influenced the decision. Retrieved cases are attached to the tool output (`reference_cases`) for traceability in the Gradio trace panel and LangSmith.
+
+If IRIS is unreachable, the table is missing, or the embedding provider fails, retrieval silently degrades and the assessment runs exactly as before (no RAG).
+
+### Ingesting the knowledge base
+
+```bash
+# inside the triage container
+docker compose exec triage python3 ingest_knowledge.py --inspect      # check dataset schema/mapping first
+docker compose exec triage python3 ingest_knowledge.py --limit 1000   # ingest a sample
+docker compose exec triage python3 ingest_knowledge.py --limit 0      # ingest everything
+```
+
+Use `--recreate` to drop and rebuild the table — required when switching to an embedding model with a different dimension (the bundled class `src/TriageAide/TriageKnowledge.cls` defaults to 1536 = OpenAI `text-embedding-3-small`; Ollama `nomic-embed-text` is 768).
+
+### Configuration
+
+See the `Vector Search RAG` block in `.env.example`. Key points:
+
+- `EMBEDDINGS_PROVIDER=openai|ollama` — the **same model must be used for ingestion and querying**; the model id is stored with each row and validated at query time (mismatch disables RAG with a warning).
+- `RAG_MIN_SIMILARITY` — cases below the threshold are discarded; an empty RAG section is better than irrelevant cases anchoring the LLM.
+- `RAG_ENABLED=false` — disables retrieval entirely, which makes A/B comparison trivial: run `test_priority.py` once with RAG on and once with it off and compare priorities/justifications.
+- Language note: the dataset is in English while triage conversations may be in Portuguese. OpenAI `text-embedding-3-*` handles cross-lingual similarity reasonably; if you use a monolingual local model, expect lower recall.
+
 ## Patient Simulator (Ollama)
 
 The `patient_sim.py` module uses a local LLM (Ollama with `gemma3:1b`) to role-play as each test patient, enabling fully automated triage conversations. Each patient has a detailed persona with medical history, current symptoms, personality traits, and behavioral rules.
@@ -231,6 +263,8 @@ patient_sim.py # Patient simulator (Ollama-based) for automated triage testing
 fhir_server.py # MCP Server 1 — FHIR CRUD (port 8000)
 triage_server.py # MCP Server 2 — contextual triage (port 8001)
 clinical_reasoning_server.py # MCP Server 3 — clinical reasoning (port 8002)
+knowledge_base.py # Shared vector-search RAG helpers (embeddings, IRIS DB-API, canonical template)
+ingest_knowledge.py # Ingestion of the fedmml-ed-triage dataset into IRIS (vector knowledge base)
 logging_config.py # Centralized logging config (LOG_LEVEL env var, stderr + file handlers)
 agent.py # Agent core (SYSTEM_PROMPT, create_triage_agent, extract_ai_response)
 cli.py                      # Interactive CLI interface
@@ -275,14 +309,11 @@ README.md                   # This file
 | `check_red_flags` | Checks for warning signs |
 | `build_questionnaire_response_data` | Builds FHIR QuestionnaireResponse |
 
-### clinical_reasoning_server.py (port 8002) — 4 tools
+### clinical_reasoning_server.py (port 8002) — 1 tool
 
 | Tool | Description |
 |---|---|
-| `assess_clinical_risk` | Risk score with justification |
-| `suggest_priority` | Care priority |
-| `generate_clinical_summary` | Summary for the physician |
-| `identify_follow_up_tasks` | Follow-up tasks |
+| `clinical_assessment` | Comprehensive assessment (risk score + priority + summary + follow-up tasks), grounded in similar ESI-labeled cases retrieved via IRIS vector search (RAG) when available |
 
 ## Observability
 

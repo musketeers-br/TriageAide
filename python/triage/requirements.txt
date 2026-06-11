@@ -12,3 +12,5 @@ uvicorn[standard]
 httpx
 elevenlabs
 grandalf
+intersystems-irispython
+datasets
