@@ -8,13 +8,22 @@
 Class TriageAide.TriageKnowledge Extends %Persistent [ DdlAllowed ]
 {
 
-/// Stable identifier of the source row in the dataset (used for idempotent re-ingestion).
+/// Stable identifier of the source row in the dataset (encounter_id — used for idempotent re-ingestion).
 Property SourceId As %String(MAXLEN = 200) [ Required ];
+
+/// Patient age in years (structured, enables hybrid filtering: SQL WHERE + vector ranking).
+Property Age As %Integer;
+
+/// Patient sex as it appears in the dataset ("M"/"F").
+Property Sex As %String(MAXLEN = 20);
 
 Property ChiefComplaint As %String(MAXLEN = 1000);
 
-/// Vital signs formatted as a short human-readable string (e.g. "HR 102, BP 140/90, SpO2 96%").
+/// Vital signs formatted as a short human-readable string (e.g. "BP 165/95, HR 102, RR 22, Temp 37.8, SpO2 94%, Pain 7/10").
 Property Vitals As %String(MAXLEN = 1000);
+
+/// Laboratory panel formatted as a short human-readable string (e.g. "WBC 11.2, Troponin 0.12, BNP 280, Lactate 1.8").
+Property Labs As %String(MAXLEN = 2000);
 
 Property ClinicalNotes As %String(MAXLEN = "");
 

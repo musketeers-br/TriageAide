@@ -139,7 +139,7 @@ The Clinical Reasoning server can ground its risk/priority decision in similar p
 
 How it works:
 
-1. `ingest_knowledge.py` downloads the dataset, builds one canonical text document per case (`Patient / Chief complaint / Vitals / Notes`), embeds documents in batches, and upserts them into `TriageAide.TriageKnowledge` (idempotent, keyed by dataset row id).
+1. `ingest_knowledge.py` downloads the dataset and maps its exact schema (`encounter_id`, `age`, `sex`, `chief_complaint`, `clinical_notes`, individual vitals like `systolic_bp`/`heart_rate`/`spo2`/`pain_score`, and a lab panel including high-signal markers like `troponin`, `bnp`, `lactate`, `inr`). It builds one canonical text document per case (`Patient / Chief complaint / Vitals / Labs / Notes`), embeds documents in batches, and upserts them into `TriageAide.TriageKnowledge` (idempotent, keyed by `encounter_id`). Age and sex are also stored as structured columns for hybrid filtering.
 2. At assessment time, `clinical_assessment` builds a query document for the current patient **using the same template and the same embedding model**, retrieves the top-K cases above a cosine-similarity threshold, and injects them into the prompt as `Reference triage cases`.
 3. The system prompt instructs the LLM that ESI is an inverted 1–5 scale (1 = most critical; ESI 1–2 ≈ emergency, 3 ≈ urgent, 4–5 ≈ routine), that the cases are synthetic reference signal (not ground truth), and to cite the cases that influenced the decision. Retrieved cases are attached to the tool output (`reference_cases`) for traceability in the Gradio trace panel and LangSmith.
 
@@ -162,6 +162,7 @@ See the `Vector Search RAG` block in `.env.example`. Key points:
 
 - `EMBEDDINGS_PROVIDER=openai|ollama` — the **same model must be used for ingestion and querying**; the model id is stored with each row and validated at query time (mismatch disables RAG with a warning).
 - `RAG_MIN_SIMILARITY` — cases below the threshold are discarded; an empty RAG section is better than irrelevant cases anchoring the LLM.
+- `RAG_AGE_WINDOW` — optional hybrid search: when > 0 and the patient's age is known, retrieval is restricted by SQL to cases within ± N years before vector ranking (e.g. `25` keeps a 30-year-old patient from matching geriatric cases). Off by default.
 - `RAG_ENABLED=false` — disables retrieval entirely, which makes A/B comparison trivial: run `test_priority.py` once with RAG on and once with it off and compare priorities/justifications.
 - Language note: the dataset is in English while triage conversations may be in Portuguese. OpenAI `text-embedding-3-*` handles cross-lingual similarity reasonably; if you use a monolingual local model, expect lower recall.
 

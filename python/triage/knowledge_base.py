@@ -18,6 +18,9 @@ Configuration (env):
   OLLAMA_BASE_URL     default http://ollama:11434
   RAG_TOP_K           default 5
   RAG_MIN_SIMILARITY  default 0.50 (cosine; retrieved cases below this are discarded)
+  RAG_AGE_WINDOW      default 0 (disabled). When > 0 and the patient's age is known,
+                      retrieval is restricted to cases within +/- N years (hybrid
+                      search: SQL filter + vector ranking)
   IRIS_HOST/IRIS_PORT/IRIS_NAMESPACE/IRIS_USERNAME/IRIS_PASSWORD — DB-API connection
 """
 
@@ -36,6 +39,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 RAG_MIN_SIMILARITY = float(os.getenv("RAG_MIN_SIMILARITY", "0.50"))
+RAG_AGE_WINDOW = int(os.getenv("RAG_AGE_WINDOW", "0"))
 
 IRIS_HOST = os.getenv("IRIS_HOST", "iris")
 IRIS_PORT = int(os.getenv("IRIS_PORT", "1972"))
@@ -92,8 +96,8 @@ def embed_query(text: str):
     return vector
 
 
-def build_case_document(chief_complaint: str = "", vitals: str = "", notes: str = "",
-                        demographics: str = "") -> str:
+def build_case_document(chief_complaint: str = "", vitals: str = "", labs: str = "",
+                        notes: str = "", demographics: str = "") -> str:
     """Canonical document template. Corpus documents (ingestion) and patient queries
     (clinical_assessment) must both go through this template — format asymmetry
     between corpus and query is a classic cause of poor vector-search recall."""
@@ -104,6 +108,8 @@ def build_case_document(chief_complaint: str = "", vitals: str = "", notes: str 
         parts.append(f"Chief complaint: {chief_complaint}.")
     if vitals:
         parts.append(f"Vitals: {vitals}.")
+    if labs:
+        parts.append(f"Labs: {labs}.")
     if notes:
         parts.append(f"Notes: {notes}")
     return " ".join(parts).strip()
@@ -137,12 +143,20 @@ def _first_key(data: dict, keys) -> str:
     return ""
 
 
+def extract_age(ctx: dict):
+    """Best-effort extraction of the patient's age (int) from the consolidated FHIR
+    context, used for the optional hybrid age filter. Returns None when unknown."""
+    raw = _first_key(ctx, ("age",)) or _first_key(ctx.get("demographics", {}) if isinstance(ctx, dict) else {}, ("age",))
+    digits = "".join(c for c in raw if c.isdigit())[:3]
+    return int(digits) if digits else None
+
+
 def build_patient_query_document(ctx: dict, triage: dict) -> str:
     """Build the vector-search query for the current patient from the consolidated
     FHIR context and the triage results, using the canonical case template.
 
     Deliberately excludes the patient's name (noise + privacy); the embedded text is
-    symptoms/conditions/vitals, which is what the corpus documents contain."""
+    symptoms/conditions/vitals/labs, which is what the corpus documents contain."""
     symptoms = _first_key(triage, ("identified_symptoms", "symptoms"))
     red_flags = _first_key(triage, ("red_flags",))
 
@@ -156,31 +170,34 @@ def build_patient_query_document(ctx: dict, triage: dict) -> str:
     demographics = " ".join(demographics_bits)
 
     vitals = _first_key(ctx, ("vitals", "vital_signs"))
+    labs = _first_key(ctx, ("observations", "labs", "lab_results"))
 
     notes_bits = []
     conditions = _first_key(ctx, ("conditions", "active_conditions", "problems"))
     medications = _first_key(ctx, ("medications", "active_medications"))
-    observations = _first_key(ctx, ("observations", "labs", "lab_results"))
     if conditions:
         notes_bits.append(f"Conditions: {conditions}")
     if medications:
         notes_bits.append(f"Medications: {medications}")
-    if observations:
-        notes_bits.append(f"Observations: {observations}")
     if red_flags:
         notes_bits.append(f"Red flags: {red_flags}")
 
     return build_case_document(
         chief_complaint=symptoms,
         vitals=vitals,
+        labs=labs,
         notes=". ".join(notes_bits),
         demographics=demographics,
     )
 
 
-def search_similar_cases(query_text: str, top_k: int = None, min_similarity: float = None) -> list:
+def search_similar_cases(query_text: str, top_k: int = None, min_similarity: float = None,
+                         age: int = None) -> list:
     """Vector search over the knowledge base. Returns a list of dicts:
     {source_id, document, esi_level, similarity} sorted by similarity (desc).
+
+    When `age` is given and RAG_AGE_WINDOW > 0, retrieval is restricted to cases
+    within +/- RAG_AGE_WINDOW years (hybrid search: SQL filter + vector ranking).
 
     Never raises: on any failure it logs a warning and returns [] so the caller can
     proceed without RAG."""
@@ -190,14 +207,19 @@ def search_similar_cases(query_text: str, top_k: int = None, min_similarity: flo
     min_similarity = RAG_MIN_SIMILARITY if min_similarity is None else min_similarity
     try:
         vector = embed_query(query_text)
+        where = ""
+        params = [vector_to_sql(vector)]
+        if age is not None and RAG_AGE_WINDOW > 0:
+            where = "WHERE (Age IS NULL OR Age BETWEEN ? AND ?) "
+            params += [age - RAG_AGE_WINDOW, age + RAG_AGE_WINDOW]
         conn = get_connection()
         try:
             cursor = conn.cursor()
             cursor.execute(
                 f"SELECT TOP {int(top_k)} SourceId, SourceDocument, ESILevel, EmbeddingModel, "
                 f"VECTOR_COSINE(Embedding, TO_VECTOR(?, DOUBLE)) "
-                f"FROM {TABLE} ORDER BY 5 DESC",
-                [vector_to_sql(vector)],
+                f"FROM {TABLE} {where}ORDER BY 5 DESC",
+                params,
             )
             rows = cursor.fetchall()
         finally:

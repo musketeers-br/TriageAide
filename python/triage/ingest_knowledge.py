@@ -28,39 +28,73 @@ logger = setup_logging("ingest_knowledge")
 
 DEFAULT_DATASET = "olaflaitinen/fedmml-ed-triage"
 
-# Best-effort column mapping: the dataset card is not machine-stable, so we probe
-# common field names. Run with --inspect to print the actual schema and adjust.
-ESI_KEYS = ("esi", "esi_level", "esi-level", "acuity", "triage_level", "triage_acuity", "label", "target")
-COMPLAINT_KEYS = ("chief_complaint", "chiefcomplaint", "complaint", "presenting_complaint", "reason_for_visit", "reason")
-NOTES_KEYS = ("clinical_notes", "notes", "note", "text", "narrative", "clinical_text", "history", "hpi", "description")
-VITALS_BLOB_KEYS = ("vitals", "vital_signs")
-VITALS_FIELDS = (
-    ("heart_rate", "HR"), ("hr", "HR"), ("pulse", "HR"),
-    ("respiratory_rate", "RR"), ("rr", "RR"),
-    ("systolic_bp", "SBP"), ("sbp", "SBP"), ("diastolic_bp", "DBP"), ("dbp", "DBP"),
-    ("blood_pressure", "BP"), ("bp", "BP"),
-    ("spo2", "SpO2"), ("o2_sat", "SpO2"), ("oxygen_saturation", "SpO2"),
-    ("temperature", "Temp"), ("temp", "Temp"),
-    ("pain_score", "Pain"), ("pain", "Pain"),
+# Exact dataset schema (see the dataset card "Data Instances"):
+#   encounter_id, patient_id, site_id, country, age, sex, arrival_timestamp,
+#   chief_complaint, clinical_notes,
+#   systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, spo2, pain_score,
+#   wbc, hemoglobin, platelet_count, sodium, potassium, creatinine, glucose,
+#   troponin, bnp, lactate, inr,
+#   esi_level
+# site_id/country/arrival_timestamp are federated-learning artifacts and are not embedded.
+
+VITAL_FIELDS = (
+    ("heart_rate", "HR"),
+    ("respiratory_rate", "RR"),
+    ("temperature", "Temp"),
+    ("spo2", "SpO2"),
 )
-AGE_KEYS = ("age", "patient_age")
-GENDER_KEYS = ("gender", "sex", "patient_gender")
+
+LAB_FIELDS = (
+    ("wbc", "WBC"),
+    ("hemoglobin", "Hb"),
+    ("platelet_count", "Plt"),
+    ("sodium", "Na"),
+    ("potassium", "K"),
+    ("creatinine", "Cr"),
+    ("glucose", "Glucose"),
+    ("troponin", "Troponin"),
+    ("bnp", "BNP"),
+    ("lactate", "Lactate"),
+    ("inr", "INR"),
+)
 
 
-def _lower_map(row: dict) -> dict:
-    return {str(k).lower(): k for k in row}
+def _num(value) -> str:
+    """Render a numeric field compactly ('102.0' -> '102', '37.8' stays)."""
+    if value is None or value == "":
+        return ""
+    try:
+        f = float(value)
+        return str(int(f)) if f == int(f) else str(round(f, 2))
+    except (TypeError, ValueError):
+        return str(value).strip()
 
 
-def _get(row: dict, lower: dict, keys) -> str:
-    for key in keys:
-        if key in lower:
-            value = row[lower[key]]
-            if value not in (None, ""):
-                return kb._stringify(value, max_len=4000)
-    return ""
+def format_vitals(row: dict) -> str:
+    bits = []
+    sbp, dbp = _num(row.get("systolic_bp")), _num(row.get("diastolic_bp"))
+    if sbp and dbp:
+        bits.append(f"BP {sbp}/{dbp}")
+    for key, label in VITAL_FIELDS:
+        value = _num(row.get(key))
+        if value:
+            bits.append(f"{label} {value}%" if label == "SpO2" else f"{label} {value}")
+    pain = _num(row.get("pain_score"))
+    if pain:
+        bits.append(f"Pain {pain}/10")
+    return ", ".join(bits)
 
 
-def _parse_esi(raw: str):
+def format_labs(row: dict) -> str:
+    bits = []
+    for key, label in LAB_FIELDS:
+        value = _num(row.get(key))
+        if value:
+            bits.append(f"{label} {value}")
+    return ", ".join(bits)
+
+
+def _parse_esi(raw):
     digits = [c for c in str(raw) if c.isdigit()]
     if not digits:
         return None
@@ -70,55 +104,43 @@ def _parse_esi(raw: str):
 
 def map_row(row: dict, idx: int):
     """Map one dataset row to a knowledge-base record, or None if no usable ESI."""
-    lower = _lower_map(row)
-
-    esi = _parse_esi(_get(row, lower, ESI_KEYS))
+    esi = _parse_esi(row.get("esi_level"))
     if esi is None:
         return None
 
-    complaint = _get(row, lower, COMPLAINT_KEYS)
-    notes = _get(row, lower, NOTES_KEYS)
+    complaint = kb._stringify(row.get("chief_complaint"), 1000)
+    notes = kb._stringify(row.get("clinical_notes"), 4000)
+    vitals = format_vitals(row)
+    labs = format_labs(row)
 
-    vitals = _get(row, lower, VITALS_BLOB_KEYS)
-    if not vitals:
-        bits, seen = [], set()
-        for key, label in VITALS_FIELDS:
-            if key in lower and label not in seen:
-                value = kb._stringify(row[lower[key]], max_len=50)
-                if value:
-                    bits.append(f"{label} {value}")
-                    seen.add(label)
-        vitals = ", ".join(bits)
-
+    age = None
+    try:
+        age = int(row.get("age")) if row.get("age") not in (None, "") else None
+    except (TypeError, ValueError):
+        pass
+    sex = kb._stringify(row.get("sex"), 20)
     demographics_bits = []
-    age = _get(row, lower, AGE_KEYS)
-    gender = _get(row, lower, GENDER_KEYS)
-    if age:
-        demographics_bits.append(f"{age}-year-old" if age.isdigit() else age)
-    if gender:
-        demographics_bits.append(gender)
+    if age is not None:
+        demographics_bits.append(f"{age}-year-old")
+    if sex:
+        demographics_bits.append(sex)
     demographics = " ".join(demographics_bits)
 
     if not (complaint or notes):
-        # Fall back to every textual field we haven't already used, so the case
-        # still produces a meaningful document.
-        used = set(ESI_KEYS) | set(COMPLAINT_KEYS) | set(NOTES_KEYS) | set(VITALS_BLOB_KEYS) \
-            | {k for k, _ in VITALS_FIELDS} | set(AGE_KEYS) | set(GENDER_KEYS)
-        notes = "; ".join(
-            f"{k}: {kb._stringify(v, 300)}" for k, v in row.items()
-            if str(k).lower() not in used and isinstance(v, str) and v.strip()
-        )
-        if not notes:
-            return None
+        return None
 
     document = kb.build_case_document(
-        chief_complaint=complaint, vitals=vitals, notes=notes, demographics=demographics
+        chief_complaint=complaint, vitals=vitals, labs=labs, notes=notes,
+        demographics=demographics,
     )
-    source_id = _get(row, lower, ("id", "case_id", "encounter_id", "record_id", "patient_id")) or f"row-{idx}"
+    source_id = kb._stringify(row.get("encounter_id"), 200) or f"row-{idx}"
     return {
-        "source_id": source_id[:200],
-        "chief_complaint": complaint[:1000],
+        "source_id": source_id,
+        "age": age,
+        "sex": sex,
+        "chief_complaint": complaint,
         "vitals": vitals[:1000],
+        "labs": labs[:2000],
         "clinical_notes": notes,
         "demographics": demographics[:500],
         "esi_level": esi,
@@ -146,8 +168,11 @@ def ensure_table(conn, dim: int, recreate: bool):
         cursor.execute(f"""
             CREATE TABLE {kb.TABLE} (
                 SourceId VARCHAR(200) NOT NULL UNIQUE,
+                Age INTEGER,
+                Sex VARCHAR(20),
                 ChiefComplaint VARCHAR(1000),
                 Vitals VARCHAR(1000),
+                Labs VARCHAR(2000),
                 ClinicalNotes LONGVARCHAR,
                 Demographics VARCHAR(500),
                 ESILevel INTEGER,
@@ -161,9 +186,9 @@ def ensure_table(conn, dim: int, recreate: bool):
 
 UPSERT_SQL = (
     f"INSERT OR UPDATE INTO {kb.TABLE} "
-    "(SourceId, ChiefComplaint, Vitals, ClinicalNotes, Demographics, ESILevel, "
-    "SourceDocument, EmbeddingModel, Embedding) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, TO_VECTOR(?, DOUBLE))"
+    "(SourceId, Age, Sex, ChiefComplaint, Vitals, Labs, ClinicalNotes, Demographics, "
+    "ESILevel, SourceDocument, EmbeddingModel, Embedding) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TO_VECTOR(?, DOUBLE))"
 )
 
 
@@ -226,7 +251,8 @@ def main():
             for record, vector in zip(batch, vectors):
                 try:
                     cursor.execute(UPSERT_SQL, [
-                        record["source_id"], record["chief_complaint"], record["vitals"],
+                        record["source_id"], record["age"], record["sex"],
+                        record["chief_complaint"], record["vitals"], record["labs"],
                         record["clinical_notes"], record["demographics"], record["esi_level"],
                         record["document"], kb.MODEL_ID, kb.vector_to_sql(vector),
                     ])
