@@ -236,6 +236,7 @@ def search_similar_cases(query_text: str, top_k: int = None, min_similarity: flo
                 return []
             if similarity is None or float(similarity) < min_similarity:
                 continue
+            logger.info("Vector search | match: id=%s document=%s, similarity=%s", source_id, document, similarity)
             cases.append({
                 "source_id": source_id,
                 "document": document or "",
