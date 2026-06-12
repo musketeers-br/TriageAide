@@ -8,12 +8,21 @@ Run inside the triage container (it already has the Python stack and the .env):
 
     docker compose exec triage python3 ingest_knowledge.py --limit 1000
 
+Use --csv to ingest from a local CSV file instead of Hugging Face:
+
+    docker compose exec triage python3 ingest_knowledge.py \\
+        --csv /data/fedmml-ed-triage.csv --limit 0
+
+Use --inspect (with --csv or --dataset) to preview the columns and first record
+without writing to the database.
+
 Idempotent: rows are keyed by the dataset row id (INSERT OR UPDATE), so re-running
 refreshes data instead of duplicating it. Use --recreate to drop and rebuild the
 table — required when switching to an embedding model with a different dimension.
 """
 
 import argparse
+import csv
 import sys
 from collections import Counter
 
@@ -192,10 +201,39 @@ UPSERT_SQL = (
 )
 
 
+def _load_hf_dataset(dataset_id: str, split: str, limit: int):
+    from datasets import load_dataset
+
+    logger.info("Loading dataset %s (split=%s)...", dataset_id, split)
+    try:
+        dataset = load_dataset(dataset_id, split=split)
+    except ValueError:
+        dataset = next(iter(load_dataset(dataset_id).values()))
+    logger.info("Dataset loaded | rows=%d | columns=%s", len(dataset), dataset.column_names)
+
+    if limit <= 0:
+        return list(dataset)
+    return [dataset[i] for i in range(min(limit, len(dataset)))]
+
+
+def _load_csv(path: str, limit: int):
+    import csv
+
+    logger.info("Loading CSV %s...", path)
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    logger.info("CSV loaded | rows=%d | columns=%s", len(rows), reader.fieldnames)
+    if limit > 0:
+        rows = rows[:limit]
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset", default=DEFAULT_DATASET, help="Hugging Face dataset id")
     parser.add_argument("--split", default="train", help="Dataset split (default: train)")
+    parser.add_argument("--csv", help="Path to local CSV file (ingests instead of HuggingFace dataset)")
     parser.add_argument("--limit", type=int, default=1000, help="Max rows to ingest (0 = all)")
     parser.add_argument("--batch-size", type=int, default=64, help="Embedding batch size")
     parser.add_argument("--recreate", action="store_true",
@@ -204,24 +242,22 @@ def main():
                         help="Print the dataset schema and the first mapped record, then exit")
     args = parser.parse_args()
 
-    from datasets import load_dataset
-
-    logger.info("Loading dataset %s (split=%s)...", args.dataset, args.split)
-    try:
-        dataset = load_dataset(args.dataset, split=args.split)
-    except ValueError:
-        dataset = next(iter(load_dataset(args.dataset).values()))
-    logger.info("Dataset loaded | rows=%d | columns=%s", len(dataset), dataset.column_names)
+    if args.csv:
+        rows = _load_csv(args.csv, args.limit)
+        columns = list(rows[0].keys()) if rows else []
+    else:
+        rows = _load_hf_dataset(args.dataset, args.split, args.limit)
+        columns = rows[0].column_names if rows else []
 
     if args.inspect:
-        print("Columns:", dataset.column_names)
-        print("Features:", dataset.features)
-        sample = dataset[0]
-        print("First row:", {k: str(v)[:120] for k, v in sample.items()})
-        print("Mapped record:", map_row(sample, 0))
+        print("Columns:", columns)
+        if rows:
+            sample = rows[0]
+            row_dict = dict(sample) if hasattr(sample, "items") else {k: str(v)[:120] for k, v in sample.items()}
+            print("First row:", row_dict)
+            print("Mapped record:", map_row(sample, 0))
         return 0
 
-    rows = dataset if args.limit <= 0 else dataset.select(range(min(args.limit, len(dataset))))
     records, skipped = [], 0
     for idx, row in enumerate(rows):
         record = map_row(row, idx)
