@@ -1,3 +1,5 @@
+# Grounding the Triage Agent with Vector Search
+
 _A vector-search knowledge base of past clinical assessments, running on InterSystems IRIS, gives the LLM a deterministic calibration signal — making its triage reasoning faster, more structured, and clinically defensible._
 
 ---
