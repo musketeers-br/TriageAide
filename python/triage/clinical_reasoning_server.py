@@ -146,7 +146,12 @@ async def clinical_assessment(
     if kb.RAG_ENABLED:
         query_doc = kb.build_patient_query_document(ctx, triage)
         logger.debug("RAG query document: %.300s", query_doc)
-        reference_cases = kb.search_similar_cases(query_doc, age=kb.extract_age(ctx))
+        try:
+            reference_cases = kb.search_similar_cases(query_doc, age=kb.extract_age(ctx))
+        except Exception as e:
+            logger.error("search_similar_cases error: %s: %s", type(e).__name__, str(e)[:300])
+        logger.debug("search_similar_cases returned")
+
         if reference_cases:
             rag_section = (
                 "\n\nReference triage cases (vector search over a synthetic ESI-labeled "

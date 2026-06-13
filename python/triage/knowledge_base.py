@@ -218,10 +218,17 @@ def search_similar_cases(query_text: str, top_k: int = None, min_similarity: flo
             cursor.execute(
                 f"SELECT TOP {int(top_k)} SourceId, SourceDocument, ESILevel, EmbeddingModel, "
                 f"VECTOR_COSINE(Embedding, TO_VECTOR(?, DOUBLE)) "
-                f"FROM {TABLE} {where}ORDER BY 5 DESC",
+                f"FROM {TABLE} {where} ORDER BY 5 DESC",
                 params,
             )
-            rows = cursor.fetchall()
+            raw_rows = cursor.fetchall()
+            rows = [tuple(r) for r in raw_rows]
+            del raw_rows
+            del cursor
+            logger.info("Vector search | rows=%d", rows)
+        except Exception as e:
+            logger.warning("Vector search error: %s: %s", type(e).__name__, str(e)[:300])
+            rows = []
         finally:
             conn.close()
 
