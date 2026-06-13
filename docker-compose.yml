@@ -40,6 +40,7 @@ services:
       - 7860:7860
     volumes:
       - ./python/triage:/app
+      - ./fedmml-ed-triage.csv:/data/fedmml-ed-triage.csv
     networks:
       - fhir-net
 

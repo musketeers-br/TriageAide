@@ -627,10 +627,10 @@ def main():
                         with gr.Row():
                             gr.Examples(
                                 examples=[
-                                    "Hi, I'm Maria Silva and I've been feeling really thirsty lately",
-                                    "I'm Maria Silva, I've been having headaches and blurred vision",
                                     "Hi, I'm Joao Santos, I've been having chest pain",
                                     "I'm Joao Santos, I've been short of breath and my legs are swollen",
+                                    "Hi, I'm Maria Silva and I've been feeling really thirsty lately",
+                                    "I'm Maria Silva, I've been having headaches and blurred vision",
                                     "I'm Roberto Lima, my cough has been getting worse",
                                     "I'm Roberto Lima, I've been feeling sad and having trouble sleeping",
                                     "Hi, I'm Ana Costa, I've been having a fever and feeling tired",

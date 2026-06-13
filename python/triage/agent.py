@@ -192,6 +192,8 @@ def _fix_tool_args_schema(tools):
             try:
                 props = schema.get("properties", {})
                 required = set(schema.get("required", []))
+                known_params = set(props.keys())
+                defaults_map = {}
                 field_defs = {}
                 for pname, pval in props.items():
                     ptype = str
@@ -204,22 +206,37 @@ def _fix_tool_args_schema(tools):
                         ptype = float
                     elif ann == "boolean":
                         ptype = bool
-                    default = ... if pname in required else pval.get("default", None)
-                    field_defs[pname] = (ptype, default)
+                    if pname in required:
+                        field_defs[pname] = (ptype, ...)
+                    else:
+                        default = pval.get("default", None)
+                        defaults_map[pname] = default
+                        field_defs[pname] = (ptype, default)
                 model = create_model(
                     f"{tool.name}_input",
                     __config__={"extra": "allow"},
                     **field_defs,
                 )
+                original_coroutine = tool.coroutine
+
+                async def filtered_coroutine(*args, _orig=original_coroutine, _known=known_params, _defaults=defaults_map, **kwargs):
+                    clean_kwargs = {}
+                    for k in _known:
+                        if k in kwargs:
+                            clean_kwargs[k] = kwargs[k]
+                        elif k in _defaults and _defaults[k] is not None:
+                            clean_kwargs[k] = _defaults[k]
+                    return await _orig(*args, **clean_kwargs)
+
                 new_tool = StructuredTool(
                     name=tool.name,
                     description=tool.description or "",
                     args_schema=model,
-                    coroutine=tool.coroutine,
+                    coroutine=filtered_coroutine,
                     response_format=tool.response_format,
                     metadata=tool.metadata,
                 )
-                logger.debug("Fixed args_schema for tool: %s", tool.name)
+                logger.debug("Fixed args_schema + filtered kwargs for tool: %s", tool.name)
                 fixed.append(new_tool)
                 continue
             except Exception as e:

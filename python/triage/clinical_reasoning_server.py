@@ -8,6 +8,8 @@ from logging_config import setup_logging
 
 load_dotenv(override=True)
 
+import knowledge_base as kb
+
 logger = setup_logging("clinical_reasoning_server", "cr_server.log")
 
 mcp = FastMCP("ClinicalReasoningServer")
@@ -92,6 +94,13 @@ Given the patient's full FHIR medical history and the triage data (identified sy
    - Include specialist referrals if needed
    - Include any gap-in-care resolutions
 
+**Reference triage cases (RAG)** — The user prompt may include a "Reference triage cases" section: similar past triage cases retrieved by vector search from a knowledge base of SYNTHETIC emergency-department cases labeled per Emergency Severity Index (ESI) guidelines. Treat them as a calibration signal, NOT as ground truth for this patient.
+- ESI is a 1-5 scale where 1 is the MOST critical and 5 is the LEAST urgent — note this is INVERTED relative to the 0-20 risk score above.
+- Approximate mapping: ESI 1-2 → emergency, ESI 3 → urgent, ESI 4-5 → routine.
+- Use the ESI levels of the most similar cases to calibrate the risk score and priority, but the patient's own FHIR history, red flags, and triage findings ALWAYS take precedence over reference cases.
+- When reference cases influence your decision, cite them in the priority justification (e.g. "consistent with reference case 2, ESI 2").
+- If the reference cases conflict with the patient's clinical picture, ignore them and say so briefly in the justification.
+
 Return a JSON object:
 {
   "risk": {
@@ -129,11 +138,32 @@ async def clinical_assessment(
     ctx_summary = json.dumps(ctx, ensure_ascii=False)[:3000]
     triage_summary = json.dumps(triage, ensure_ascii=False)[:2000]
 
+    # RAG: retrieve similar (synthetic) triage cases from IRIS via vector search.
+    # search_similar_cases never raises — on any failure it returns [] and the
+    # assessment proceeds exactly as it did before RAG existed.
+    reference_cases = []
+    rag_section = ""
+    if kb.RAG_ENABLED:
+        query_doc = kb.build_patient_query_document(ctx, triage)
+        logger.debug("RAG query document: %.300s", query_doc)
+        try:
+            reference_cases = kb.search_similar_cases(query_doc, age=kb.extract_age(ctx))
+        except Exception as e:
+            logger.error("search_similar_cases error: %s: %s", type(e).__name__, str(e)[:300])
+        logger.debug("search_similar_cases returned")
+
+        if reference_cases:
+            rag_section = (
+                "\n\nReference triage cases (vector search over a synthetic ESI-labeled "
+                "knowledge base, most similar first):\n"
+                + kb.format_cases_for_prompt(reference_cases)
+            )
+
     user_prompt = f"""Patient FHIR data:
 {ctx_summary}
 
 Triage data:
-{triage_summary}
+{triage_summary}{rag_section}
 
 Perform a comprehensive clinical assessment. Return JSON with risk, priority, summary, and follow_up_tasks."""
 
@@ -145,9 +175,30 @@ Perform a comprehensive clinical assessment. Return JSON with risk, priority, su
     }
 
     result = await _llm_json(_CA_SYSTEM, user_prompt, fallback=fallback)
-    logger.info("clinical_assessment | result risk=%s priority=%s",
+
+    # Attach the retrieved cases to the tool output for traceability (visible in the
+    # Gradio trace panel and LangSmith), with documents trimmed to keep output lean.
+    if reference_cases:
+        try:
+            data = json.loads(result)
+            if isinstance(data, dict):
+                data["reference_cases"] = [
+                    {
+                        "source_id": c["source_id"],
+                        "esi_level": c["esi_level"],
+                        "similarity": c["similarity"],
+                        "document": c["document"][:300],
+                    }
+                    for c in reference_cases
+                ]
+                result = json.dumps(data, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    logger.info("clinical_assessment | result risk=%s priority=%s | rag_cases=%d",
                 json.loads(result).get("risk", {}).get("level", "?") if result else "?",
-                json.loads(result).get("priority", {}).get("level", "?") if result else "?")
+                json.loads(result).get("priority", {}).get("level", "?") if result else "?",
+                len(reference_cases))
     return result
 
 

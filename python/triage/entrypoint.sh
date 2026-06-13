@@ -37,6 +37,12 @@ else
   echo "Seed data already exists ($PATIENT_COUNT patients). Skipping."
 fi
 
+if [ "${INGEST_KNOWLEDGE:-true}" = "true" ]; then
+  echo "Ingesting knowledge base (this may take a few minutes)..."
+  python3 ingest_knowledge.py --limit 0 --recreate || echo "Warning: knowledge base ingestion failed (set INGEST_KNOWLEDGE=false to skip)"
+  echo "Knowledge base ingestion complete."
+fi
+
 if [ -d "/app/cache" ]; then
   for db in /app/cache/langchain_cache_gradio.db /app/cache/tool_cache_gradio.db; do
     if [ -f "$db" ]; then
