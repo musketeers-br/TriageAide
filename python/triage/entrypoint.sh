@@ -39,7 +39,7 @@ fi
 
 if [ "${INGEST_KNOWLEDGE:-true}" = "true" ]; then
   echo "Ingesting knowledge base (this may take a few minutes)..."
-  python3 ingest_knowledge.py --limit 0 --recreate || echo "Warning: knowledge base ingestion failed (set INGEST_KNOWLEDGE=false to skip)"
+  python3 ingest_knowledge.py --csv /data/fedmml-ed-triage.csv --limit 0 --recreate || echo "Warning: knowledge base ingestion failed (set INGEST_KNOWLEDGE=false to skip)"
   echo "Knowledge base ingestion complete."
 fi
 
