@@ -25,14 +25,15 @@
     <Resource Name="User.PKG"/>
     <Resource Name="FHIR.PKG"/>
     <FileCopy Name="data/fhir/" Target="${mgrdir}test-data-fhir/"/>
-      <CSPApplication
-        Url="/fhirUI"
-        SourcePath="/fhirUI"
-        DeployPath="{$cspdir}/fhirUI"
-        ServeFiles="1"
-        Recurse="1"
-        CookiePath="/fhirUI"
-       />
+    <FileCopy Name="python/triage/" Target="${mgrdir}triageaide-mcp/"/>
+    <CSPApplication
+      Url="/fhirUI"
+      SourcePath="/fhirUI"
+      DeployPath="{$cspdir}/fhirUI"
+      ServeFiles="1"
+      Recurse="1"
+      CookiePath="/fhirUI"
+      />
     <AfterInstallMessage>
 &#13;You can change the default settings
 &#13;Name - to alter created/modified namespace (now/default FHIRSERVER)
